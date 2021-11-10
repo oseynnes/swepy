@@ -11,6 +11,7 @@ import numpy as np
 class SwePy(tk.Tk):
     def __init__(self):
         super().__init__()
+        options = {'fill': 'x', 'padx': 5, 'pady': 5}
         self.path = None
         self.ds = None
         self.img_array = None
@@ -35,12 +36,14 @@ class SwePy(tk.Tk):
         self.columnconfigure(1, weight=4)
 
         # menu left
-        self.menu_left = ttk.Frame(self)
-        self.menu_left.grid(row=1, column=0, rowspan=2, sticky=tk.NSEW)
+        self.left_panel = ttk.Frame(self)
+        self.left_panel.grid(row=1, column=0, rowspan=2, sticky=tk.NSEW)
         # left menu widgets
-        self.btn_open = ttk.Button(self.menu_left, text="Open dicom file", command=self.get_dicom).pack(fill='x')
-        self.btn_fhz = ttk.Button(self.menu_left, text="Enter SWE Freq.").pack(fill='x')  # later to call entry box
-        self.btn_analyse = ttk.Button(self.menu_left, text="Analyse").pack(fill='x')
+        self.btn_open = ttk.Button(self.left_panel, text="Open dicom file", command=self.get_dicom).pack(**options)
+        self.btn_fhz = ttk.Button(self.left_panel, text="Enter SWE Freq.").pack(**options)  # TODO: add ttk.Entry widget
+        self.btn_analyse = ttk.Button(self.left_panel, text="Analyse").pack(**options)  # TODO: link to methods (class?)
+
+        # TODO: add information from the dicom header under the buttons of left panel (in own frame?, use ttk.Treeview?)
 
         # image frame and canvas
         self.img_frame = ttk.Frame(self)
@@ -52,7 +55,7 @@ class SwePy(tk.Tk):
         self.img_name_frame = ttk.Frame(self)
         self.img_name_frame.grid(row=0, column=1, sticky=tk.EW)
         self.img_name = tk.Label(self.img_name_frame, text="some name")
-        self.img_name.pack()
+        self.img_name.pack(**options)
 
         # draw region of interest
         self.canvas.bind("<Button-1>", self.on_button_press)
@@ -67,13 +70,14 @@ class SwePy(tk.Tk):
         self.controls_frame.grid(row=4, column=1, sticky=tk.EW)
         self.play_btn = ttk.Button(self.controls_frame, text="Play")
         self.play_btn['command'] = self.play_video
-        self.play_btn.pack()
+        self.play_btn.pack(**options)
 
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
         self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
 
     def get_dicom(self):
+        # TODO: link to a ttk.Progressbar widget (dicom loading is a few seconds)
         self.select_file()
         self.ds = dcmread(self.path)
         img_array_raw = self.ds.pixel_array
@@ -81,11 +85,13 @@ class SwePy(tk.Tk):
         self.set_image()
 
     def set_image(self):
-        print(f'{self.frame} / {self.ds.NumberOfFrames}')
+        # print(f'{self.frame} / {self.ds.NumberOfFrames}')
         self.img = ImageTk.PhotoImage(image=Image.fromarray(self.img_array[self.frame]))  # make it "usable" in tkinter
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)  # set image obj on the canvas at position (0, 0)
 
     def play_video(self):
+        # TODO: - make the video start from frame 1 if self.frame = last frame
+        #       - implement video pause
         if self.ds:
             while self.frame < self.ds.NumberOfFrames:
                 self.set_image()
@@ -95,6 +101,7 @@ class SwePy(tk.Tk):
             showinfo(title='No video', message='Please load a Dicom file first')
             return
 
+    # TODO: Add function to move frame by frame (add slider with ttk.Scale widget?)
 
     def on_button_press(self, event):
         # save mouse drag start position
@@ -117,3 +124,6 @@ class SwePy(tk.Tk):
 if __name__ == '__main__':
     app = SwePy()
     app.mainloop()
+
+# TODO: - move frames and canvas to subclasses
+#       - add doctrings to class(es) and functions
