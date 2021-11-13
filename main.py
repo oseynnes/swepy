@@ -68,8 +68,9 @@ class SwePy(tk.Tk):
         # controls
         self.controls_frame = ttk.Frame(self)
         self.controls_frame.grid(row=4, column=1, sticky=tk.EW)
+        self.pause = False  # control video pause
         self.play_btn = ttk.Button(self.controls_frame, text="Play")
-        self.play_btn['command'] = self.play_video
+        self.play_btn['command'] = self.toggle_play_pause
         self.play_btn.pack(**options)
 
     def select_file(self):
@@ -82,21 +83,36 @@ class SwePy(tk.Tk):
         self.ds = dcmread(self.path)
         img_array_raw = self.ds.pixel_array
         self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
-        self.set_image()
+        self.get_frame()
 
-    def set_image(self):
+    def get_frame(self):
         # print(f'{self.frame} / {self.ds.NumberOfFrames}')
         self.img = ImageTk.PhotoImage(image=Image.fromarray(self.img_array[self.frame]))  # make it "usable" in tkinter
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)  # set image obj on the canvas at position (0, 0)
 
+    def toggle_play_pause(self):
+        if self.pause:
+            self.pause = False
+            self.play_btn.config(text='Play')
+            self.after_cancel(self.after_id)
+        else:
+            self.pause = True
+            self.play_btn.config(text='Pause')
+            self.play_video()
+
     def play_video(self):
-        # TODO: - make the video start from frame 1 if self.frame = last frame
-        #       - implement video pause
         if self.ds:
-            while self.frame < self.ds.NumberOfFrames:
-                self.set_image()
-                self.frame += 1
-                self.after(50, self.play_video)  # 50ms
+            self.get_frame()
+            print(f'getting frame {self.frame}')
+            self.frame += 1
+            if self.frame < self.ds.NumberOfFrames:
+                print(f'showing frame {self.frame}')
+                self.after_id = self.after(50, self.play_video)  # 50ms
+            else:
+                self.pause = False
+                self.play_btn.config(text='Play')
+                self.frame = 0
+                print(f'frame offset to {self.frame}')
         else:
             showinfo(title='No video', message='Please load a Dicom file first')
             return
@@ -127,3 +143,4 @@ if __name__ == '__main__':
 
 # TODO: - move frames and canvas to subclasses
 #       - add doctrings to class(es) and functions
+
