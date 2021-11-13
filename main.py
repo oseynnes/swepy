@@ -43,8 +43,6 @@ class SwePy(tk.Tk):
         self.btn_fhz = ttk.Button(self.left_panel, text="Enter SWE Freq.").pack(**options)  # TODO: add ttk.Entry widget
         self.btn_analyse = ttk.Button(self.left_panel, text="Analyse").pack(**options)  # TODO: link to methods (class?)
 
-        # TODO: add information from the dicom header under the buttons of left panel (in own frame?, use ttk.Treeview?)
-
         # image frame and canvas
         self.img_frame = ttk.Frame(self)
         self.canvas = tk.Canvas(self.img_frame, width=720, height=540, bg='black', cursor="cross")
@@ -68,10 +66,12 @@ class SwePy(tk.Tk):
         # controls
         self.controls_frame = ttk.Frame(self)
         self.controls_frame.grid(row=4, column=1, sticky=tk.EW)
+
         current_value = tk.DoubleVar()
         self.slider = ttk.Scale(self.controls_frame,
                                 from_=0, to=0,
                                 variable=current_value)
+        self.slider['state'] = 'disabled'
         self.slider['command'] = self.update_slider
         self.slider.pack(**options)
 
@@ -92,7 +92,8 @@ class SwePy(tk.Tk):
         # TODO: link to a ttk.Progressbar widget (dicom loading is a few seconds)
         self.select_file()
         self.ds = dcmread(self.path)
-        self.slider.config(to=self.ds.NumberOfFrames)
+        self.slider.config(to=self.ds.NumberOfFrames)  # set max number of frames
+        self.slider.config(state='normal')  # activate slider
         img_array_raw = self.ds.pixel_array
         self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
         self.get_frame()
