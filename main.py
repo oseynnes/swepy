@@ -21,7 +21,7 @@ class SwePy(tk.Tk):
         self.roi_coords = np.empty([4, ])
 
         self.title('SWE image viewer')
-        window_width = 1000
+        window_width = 1150
         window_height = 700
         # get the screen dimension
         screen_width = self.winfo_screenwidth()
@@ -35,13 +35,21 @@ class SwePy(tk.Tk):
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
 
-        # menu left
+        # Left menu
         self.left_panel = ttk.Frame(self)
         self.left_panel.grid(row=1, column=0, rowspan=2, sticky=tk.NSEW)
-        # left menu widgets
+        # left menu buttons
         self.btn_open = ttk.Button(self.left_panel, text="Open dicom file", command=self.get_dicom).pack(**options)
         self.btn_fhz = ttk.Button(self.left_panel, text="Enter SWE Freq.").pack(**options)  # TODO: add ttk.Entry widget
         self.btn_analyse = ttk.Button(self.left_panel, text="Analyse").pack(**options)  # TODO: link to methods (class?)
+        # Left menu info table
+        columns = ('dcm_property', 'value')
+        self.variables = (None,)
+        self.values = (None,)
+        self.tv = ttk.Treeview(self.left_panel, columns=columns, show='headings')
+        self.tv.heading('dcm_property', text="DCM Property")
+        self.tv.heading("value", text="Value")
+        self.tv.pack(**options)
 
         # image frame and canvas
         self.img_frame = ttk.Frame(self)
@@ -52,7 +60,7 @@ class SwePy(tk.Tk):
         # image name
         self.img_name_frame = ttk.Frame(self)
         self.img_name_frame.grid(row=0, column=1, sticky=tk.EW)
-        self.img_name = tk.Label(self.img_name_frame, text="some name")
+        self.img_name = ttk.Label(self.img_name_frame, text=None)
         self.img_name.pack(**options)
 
         # draw region of interest
@@ -63,14 +71,12 @@ class SwePy(tk.Tk):
         self.start_x = None
         self.start_y = None
 
-        # controls
+        # controls (bottom)
         self.controls_frame = ttk.Frame(self)
         self.controls_frame.grid(row=4, column=1, sticky=tk.EW)
 
         current_value = tk.DoubleVar()
-        self.slider = ttk.Scale(self.controls_frame,
-                                from_=0, to=0,
-                                variable=current_value)
+        self.slider = ttk.Scale(self.controls_frame, from_=0, to=0, variable=current_value)
         self.slider['state'] = 'disabled'
         self.slider['command'] = self.update_slider
         self.slider.pack(**options)
@@ -79,6 +85,12 @@ class SwePy(tk.Tk):
         self.play_btn = ttk.Button(self.controls_frame, text="Play")
         self.play_btn['command'] = self.toggle_play_pause
         self.play_btn.pack(**options)
+
+
+    def update_dcm_info(self, labels, content):
+        rows = (zip(labels, content))
+        for row in rows:
+            self.tv.insert(parent='', index=tk.END, values=row)
 
     def update_slider(self, event):
         self.frame = int(self.slider.get())
@@ -94,14 +106,13 @@ class SwePy(tk.Tk):
         self.ds = dcmread(self.path)
         self.slider.config(to=self.ds.NumberOfFrames)  # set max number of frames
         self.slider.config(state='normal')  # activate slider
+        self.values = (self.ds.NumberOfFrames, self.ds.Rows, self.ds.Columns)  # get dcm info
+        self.variables = ('No. of frames', 'No. of rows', 'No. of columns')
+        self.update_dcm_info(self.variables, self.values)
+        self.img_name.config(text=self.path.split('/')[-1])  # TODO: check that this works on Windows
         img_array_raw = self.ds.pixel_array
         self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
         self.get_frame()
-        ttk.Label(self.left_panel, text='').pack()  # Empty row after buttons (probably a better way than this)
-        ttk.Label(self.left_panel, text='DICOM FILE INFO:').pack()
-        ttk.Label(self.left_panel, text='No. of frames: ' + str(self.ds.NumberOfFrames)).pack()
-        ttk.Label(self.left_panel, text='No. of rows: ' + str(self.ds.Rows)).pack()
-        ttk.Label(self.left_panel, text='No. of columns: ' + str(self.ds.Columns)).pack()
 
     def get_frame(self):
         # print(f'{self.frame} / {self.ds.NumberOfFrames}')
@@ -121,16 +132,13 @@ class SwePy(tk.Tk):
     def play_video(self):
         if self.ds:
             self.get_frame()
-            print(f'getting frame {self.frame}')
             self.frame += 1
             if self.frame < self.ds.NumberOfFrames:
-                print(f'showing frame {self.frame}')
                 self.after_id = self.after(50, self.play_video)  # 50ms
             else:
                 self.pause = False
                 self.play_btn.config(text='Play')
                 self.frame = 0
-                print(f'frame offset to {self.frame}')
         else:
             showinfo(title='No video', message='Please load a Dicom file first')
             return
