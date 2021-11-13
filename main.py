@@ -22,7 +22,7 @@ class SwePy(tk.Tk):
 
         self.title('SWE image viewer')
         window_width = 1000
-        window_height = 650
+        window_height = 700
         # get the screen dimension
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
@@ -68,10 +68,21 @@ class SwePy(tk.Tk):
         # controls
         self.controls_frame = ttk.Frame(self)
         self.controls_frame.grid(row=4, column=1, sticky=tk.EW)
+        current_value = tk.DoubleVar()
+        self.slider = ttk.Scale(self.controls_frame,
+                                from_=0, to=0,
+                                variable=current_value)
+        self.slider['command'] = self.update_slider
+        self.slider.pack(**options)
+
         self.pause = False  # control video pause
         self.play_btn = ttk.Button(self.controls_frame, text="Play")
         self.play_btn['command'] = self.toggle_play_pause
         self.play_btn.pack(**options)
+
+    def update_slider(self, event):
+        self.frame = int(self.slider.get())
+        self.get_frame()
 
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
@@ -81,9 +92,15 @@ class SwePy(tk.Tk):
         # TODO: link to a ttk.Progressbar widget (dicom loading is a few seconds)
         self.select_file()
         self.ds = dcmread(self.path)
+        self.slider.config(to=self.ds.NumberOfFrames)
         img_array_raw = self.ds.pixel_array
         self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
         self.get_frame()
+        ttk.Label(self.left_panel, text='').pack()  # Empty row after buttons (probably a better way than this)
+        ttk.Label(self.left_panel, text='DICOM FILE INFO:').pack()
+        ttk.Label(self.left_panel, text='No. of frames: ' + str(self.ds.NumberOfFrames)).pack()
+        ttk.Label(self.left_panel, text='No. of rows: ' + str(self.ds.Rows)).pack()
+        ttk.Label(self.left_panel, text='No. of columns: ' + str(self.ds.Columns)).pack()
 
     def get_frame(self):
         # print(f'{self.frame} / {self.ds.NumberOfFrames}')
@@ -116,8 +133,6 @@ class SwePy(tk.Tk):
         else:
             showinfo(title='No video', message='Please load a Dicom file first')
             return
-
-    # TODO: Add function to move frame by frame (add slider with ttk.Scale widget?)
 
     def on_button_press(self, event):
         # save mouse drag start position
