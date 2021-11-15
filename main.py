@@ -2,36 +2,32 @@ import tkinter as tk
 from tkinter import ttk, filedialog as fd
 from tkinter.messagebox import showinfo
 
-from PIL import ImageTk, Image
-from pydicom import dcmread
-from pydicom.pixel_data_handlers.util import convert_color_space
 import numpy as np
+from PIL import ImageTk, Image
+
+from processing import Data
 
 
 class SwePy(tk.Tk):
     def __init__(self):
         super().__init__()
         options = {'fill': 'x', 'padx': 5, 'pady': 5}
-        self.path = None
-        self.ds = None
-        self.img_array = None
+        # self.path = None
+        self.data = None
+        # self.img_array = None
         self.img = None
         self.frame = 0
         self.x = self.y = 0
         self.roi_coords = np.empty([4, ])
 
-        self.title('SWE image viewer')
+        self.title('SwePy')
         window_width = 1150
         window_height = 700
-        # get the screen dimension
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
-        # find the center point
         center_x = int(screen_width / 2 - window_width / 2)
         center_y = int(screen_height / 3 - window_height / 3)
-        # set the position of the window to the center of the screen
         self.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
-        # set-up window grid
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
 
@@ -39,7 +35,7 @@ class SwePy(tk.Tk):
         self.left_panel = ttk.Frame(self)
         self.left_panel.grid(row=1, column=0, rowspan=2, sticky=tk.NSEW)
         # left menu buttons
-        self.btn_open = ttk.Button(self.left_panel, text="Open dicom file", command=self.get_dicom).pack(**options)
+        self.btn_open = ttk.Button(self.left_panel, text="Open dicom file", command=self.load_file).pack(**options)
         self.btn_fhz = ttk.Button(self.left_panel, text="Enter SWE Freq.").pack(**options)  # TODO: add ttk.Entry widget
         self.btn_analyse = ttk.Button(self.left_panel, text="Analyse").pack(**options)  # TODO: link to methods (class?)
         # Left menu info table
@@ -75,8 +71,8 @@ class SwePy(tk.Tk):
         self.controls_frame = ttk.Frame(self)
         self.controls_frame.grid(row=4, column=1, sticky=tk.EW)
 
-        current_value = tk.DoubleVar()
-        self.slider = ttk.Scale(self.controls_frame, from_=0, to=0, variable=current_value)
+        self.current_value = tk.DoubleVar()
+        self.slider = ttk.Scale(self.controls_frame, from_=0, to=0, variable=self.current_value)
         self.slider['state'] = 'disabled'
         self.slider['command'] = self.update_slider
         self.slider.pack(**options)
@@ -86,38 +82,24 @@ class SwePy(tk.Tk):
         self.play_btn['command'] = self.toggle_play_pause
         self.play_btn.pack(**options)
 
-
-    def update_dcm_info(self, labels, content):
-        rows = (zip(labels, content))
-        for row in rows:
-            self.tv.insert(parent='', index=tk.END, values=row)
-
-    def update_slider(self, event):
-        self.frame = int(self.slider.get())
-        self.get_frame()
-
-    def select_file(self):
-        filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
-        self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
-
-    def get_dicom(self):
-        # TODO: link to a ttk.Progressbar widget (dicom loading is a few seconds)
-        self.select_file()
-        self.ds = dcmread(self.path)
-        self.slider.config(to=self.ds.NumberOfFrames)  # set max number of frames
-        self.slider.config(state='normal')  # activate slider
-        self.values = (self.ds.NumberOfFrames, self.ds.Rows, self.ds.Columns)  # get dcm info
-        self.variables = ('No. of frames', 'No. of rows', 'No. of columns')
-        self.update_dcm_info(self.variables, self.values)
-        self.img_name.config(text=self.path.split('/')[-1])  # TODO: check that this works on Windows
-        img_array_raw = self.ds.pixel_array
-        self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
-        self.get_frame()
+    # def select_file(self):
+    #     filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
+    #     self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
 
     def get_frame(self):
-        # print(f'{self.frame} / {self.ds.NumberOfFrames}')
-        self.img = ImageTk.PhotoImage(image=Image.fromarray(self.img_array[self.frame]))  # make it "usable" in tkinter
+        self.img = ImageTk.PhotoImage(
+            image=Image.fromarray(self.data.img_array[self.frame]))  # make it "usable" in tkinter
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)  # set image obj on the canvas at position (0, 0)
+
+    def view_dicom(self):
+        # TODO: link to a ttk.Progressbar widget (dicom loading is a few seconds)
+        self.data = Data()
+        self.data.load_dicom()
+        self.get_frame()
+
+    def update_slider(self, event):
+        self.frame = int(self.current_value.get())
+        self.get_frame()
 
     def toggle_play_pause(self):
         if self.pause:
@@ -130,10 +112,11 @@ class SwePy(tk.Tk):
             self.play_video()
 
     def play_video(self):
-        if self.ds:
+        if self.data.ds:
+            self.current_value.set(self.frame)
             self.get_frame()
             self.frame += 1
-            if self.frame < self.ds.NumberOfFrames:
+            if self.frame < self.data.ds.NumberOfFrames:
                 self.after_id = self.after(50, self.play_video)  # 50ms
             else:
                 self.pause = False
@@ -142,6 +125,32 @@ class SwePy(tk.Tk):
         else:
             showinfo(title='No video', message='Please load a Dicom file first')
             return
+
+    def set_img_name(self):
+        self.img_name.config(text=self.data.img_name)
+
+    def activate_slider(self):
+        self.slider.config(to=self.data.ds.NumberOfFrames)  # set max number of frames
+        self.slider.config(state='normal')  # activate slider
+        self.values = (self.data.ds.NumberOfFrames,
+                       self.data.ds.Rows,
+                       self.data.ds.Columns,
+                       self.data.ds.RecommendedDisplayFrameRate)  # get dcm info
+        self.variables = ('No. of frames',
+                          'No. of rows',
+                          'No. of columns',
+                          'B mode Fhz')
+
+    def update_dcm_info(self, labels, content):
+        rows = (zip(labels, content))
+        for row in rows:
+            self.tv.insert(parent='', index=tk.END, values=row)
+
+    def load_file(self):
+        self.view_dicom()
+        self.activate_slider()
+        self.update_dcm_info(self.variables, self.values)
+        self.set_img_name()
 
     def on_button_press(self, event):
         # save mouse drag start position
@@ -156,9 +165,8 @@ class SwePy(tk.Tk):
         # expand rectangle as you drag the mouse
         self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
 
-    def on_button_release(self):
-        self.roi_coords = np.array(self.canvas.coords(self.rect))
-        print(self.roi_coords.shape)
+    def on_button_release(self, event):
+        self.data.roi_coords = np.array(self.canvas.coords(self.rect))
 
 
 if __name__ == '__main__':
@@ -167,4 +175,3 @@ if __name__ == '__main__':
 
 # TODO: - move frames and canvas to subclasses
 #       - add doctrings to class(es) and functions
-
