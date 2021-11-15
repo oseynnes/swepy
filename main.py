@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog as fd
+from tkinter import ttk
 from tkinter.messagebox import showinfo
 
 import numpy as np
@@ -12,9 +12,7 @@ class SwePy(tk.Tk):
     def __init__(self):
         super().__init__()
         options = {'fill': 'x', 'padx': 5, 'pady': 5}
-        # self.path = None
         self.data = None
-        # self.img_array = None
         self.img = None
         self.frame = 0
         self.x = self.y = 0
@@ -81,10 +79,6 @@ class SwePy(tk.Tk):
         self.play_btn = ttk.Button(self.controls_frame, text="Play")
         self.play_btn['command'] = self.toggle_play_pause
         self.play_btn.pack(**options)
-
-    # def select_file(self):
-    #     filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
-    #     self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
 
     def get_frame(self):
         self.img = ImageTk.PhotoImage(
