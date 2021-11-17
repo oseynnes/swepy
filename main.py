@@ -1,11 +1,41 @@
 import tkinter as tk
 from tkinter import ttk
-from tkinter.messagebox import showinfo
 
 import numpy as np
 from PIL import ImageTk, Image
 
+import utils
 from processing import Data
+
+
+class UsrEntry(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__()
+        self.swe_fhz = None
+
+        utils.set_win_geometry(self, 200, 100)
+        self.resizable(False, False)
+        self.title('SWE frequency')
+
+        self.usr_value = tk.StringVar()
+        swe_fhz_entry = ttk.Entry(self, textvariable=self.usr_value)
+        swe_fhz_entry.pack(padx=10, pady=10)
+        swe_fhz_entry.focus()
+        save_button = ttk.Button(self, text='Save', command=self.save_fhz)
+        save_button.pack()
+
+    def save_fhz(self):
+        try:
+            float(self.usr_value.get())
+        except ValueError:
+            utils.warn_no_number()
+            self.destroy()
+            return
+        app.swe_fhz = self.usr_value.get()
+        self.destroy()
+        if 'swe_row' in app.tv.get_children():
+            app.tv.delete('swe_row')
+        app.tv.insert(parent='', index=tk.END, iid='swe_row', values=('SWE frequency', app.swe_fhz))
 
 
 class SwePy(tk.Tk):
@@ -17,15 +47,12 @@ class SwePy(tk.Tk):
         self.frame = 0
         self.x = self.y = 0
         self.roi_coords = np.empty([4, ])
+        self.swe_fhz = None  # TODO: find a way pass it to Data class or change structure to save variables elsewhere
 
         self.title('SwePy')
         window_width = 1150
         window_height = 700
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        center_x = int(screen_width / 2 - window_width / 2)
-        center_y = int(screen_height / 3 - window_height / 3)
-        self.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
+        utils.set_win_geometry(self, window_width, window_height)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
 
@@ -34,7 +61,8 @@ class SwePy(tk.Tk):
         self.left_panel.grid(row=1, column=0, rowspan=2, sticky=tk.NSEW)
         # left menu buttons
         self.btn_open = ttk.Button(self.left_panel, text="Open dicom file", command=self.load_file).pack(**options)
-        self.btn_fhz = ttk.Button(self.left_panel, text="Enter SWE Freq.").pack(**options)  # TODO: add ttk.Entry widget
+        self.btn_fhz = ttk.Button(self.left_panel, text="Enter SWE Freq.", command=self.call_usr_entry)
+        self.btn_fhz.pack(**options)
         self.btn_analyse = ttk.Button(self.left_panel, text="Analyse").pack(**options)  # TODO: link to methods (class?)
         # Left menu info table
         columns = ('dcm_property', 'value')
@@ -80,6 +108,14 @@ class SwePy(tk.Tk):
         self.play_btn['command'] = self.toggle_play_pause
         self.play_btn.pack(**options)
 
+    def call_usr_entry(self):
+        # if self.data:
+            usr_entry = UsrEntry(self)
+            usr_entry.grab_set()
+        # else:
+        #     utils.warn_no_video()
+        #     return
+
     def get_frame(self):
         self.img = ImageTk.PhotoImage(
             image=Image.fromarray(self.data.img_array[self.frame]))  # make it "usable" in tkinter
@@ -106,7 +142,7 @@ class SwePy(tk.Tk):
             self.play_video()
 
     def play_video(self):
-        if self.data.ds:
+        if self.data:
             self.current_value.set(self.frame)
             self.get_frame()
             self.frame += 1
@@ -117,7 +153,7 @@ class SwePy(tk.Tk):
                 self.play_btn.config(text='Play')
                 self.frame = 0
         else:
-            showinfo(title='No video', message='Please load a Dicom file first')
+            utils.warn_no_video()
             return
 
     def set_img_name(self):
