@@ -66,7 +66,7 @@ class LeftPanel(ttk.Frame):
         self.grid(row=1, column=0, rowspan=2, sticky=tk.NSEW)
 
         self.btn_open = ttk.Button(self, text='Open dicom file')
-        self.btn_open.pack(fill='x', expand=True)
+        self.btn_open.pack(**options)
 
         self.fhz_frame = ttk.Frame(self)
         self.fhz_frame.pack()
@@ -75,7 +75,7 @@ class LeftPanel(ttk.Frame):
         self.usr_value = tk.StringVar()
         self.usr_entry = ttk.Entry(self.fhz_frame, width=3, textvariable=self.usr_value)
         self.usr_entry.pack(side='left', **options)
-        self.usr_entry.focus()
+        # self.usr_entry.focus()
 
         # Left menu info table
         columns = ('dcm_property', 'value')
@@ -221,6 +221,7 @@ class View(ttk.Frame):
         self.activate_slider()
         self.update_dcm_info()
         self.set_img_name()
+        self.left_panel.usr_entry.focus()
 
 
 class Controller:
