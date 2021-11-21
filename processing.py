@@ -25,3 +25,12 @@ class Data:
         self.ds = dcmread(self.path)
         img_array_raw = self.ds.pixel_array
         self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
+
+    def resample(self, swe_fhz=1.0):  # TODO: select unique SWE frames (NB: 2nd frame comes at index 3 or 4)
+        pass
+
+    def remove_voids(self):  # TODO: filter function
+        # find voids (RGB values?)
+        # apply median filter, replacing each pixel with the median of the neighboring pixel values
+        # radius=5?
+        pass
