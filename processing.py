@@ -1,5 +1,3 @@
-from tkinter import filedialog as fd
-
 import numpy as np
 from pydicom import dcmread
 from pydicom.pixel_data_handlers.util import convert_color_space
@@ -9,7 +7,6 @@ class Data:
     def __init__(self, path):
         super().__init__()
         self.path = path
-        print(f'path in Data: {self.path}')
         self.img_name = None
         self.ds = None
         self.img_array = None
@@ -20,10 +17,6 @@ class Data:
         self.roi_coords = None
         self.top_fov_coords = None
         self.bmode_fhz = None
-
-    # def select_file(self):
-    #     filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
-    #     self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
 
     def get_img_name(self):
         if self.path:
@@ -45,9 +38,6 @@ class Data:
         return coords
 
     def load_dicom(self):
-        print('Loading...')
-        # self.select_file()
-        # self.img_name = self.path.split('/')[-1]  # TODO: check that this works on Windows
         self.get_img_name()
         self.ds = dcmread(self.path)
         self.define_rois()

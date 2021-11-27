@@ -46,13 +46,7 @@ class View(ttk.Frame):
         self.controller = controller
 
     def analyse(self):
-        self.roi_coords = self.img_panel.roi_coords
-        # TODO: continue function:
-        #                   - move function to controller
-        #                   - select roi in each frame
-        #                   - filter voids
-        #                   - get relevant variables of SWE from RGB values in ROI and scale bar
-        pass
+        self.controller.analyse()
 
     def get_usr_entry(self, event):
         if self.ds:
@@ -169,6 +163,14 @@ class Controller:
 
     def get_swe_array(self, swe_fhz):
         return self.data.resample(swe_fhz)
+
+    def analyse(self):
+        self.data.roi_coords = self.view.img_panel.roi_coords  # TODO: choose to btw dictionary and array formats
+        # TODO: continue function:
+        #                   - select roi in each frame
+        #                   - filter voids
+        #                   - get relevant variables of SWE from RGB values in ROI and scale bar
+        pass
 
 
 class App(tk.Tk):
