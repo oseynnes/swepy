@@ -12,29 +12,36 @@ class ImgPanel(ttk.Frame):
         self.rect = self.start_x = self.start_y = None
         self.x = self.y = 0
 
-        self.canvas = tk.Canvas(self, width=720,
-                                height=540, bg='black', cursor="cross")
-        self.canvas.grid(row=1, column=1, rowspan=3,
-                         sticky=tk.NSEW, padx=5, pady=5)
-        self.grid(row=1, column=1, rowspan=3,
-                  sticky=tk.NSEW, padx=5, pady=5)
+        self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
+        self.canvas.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
+        self.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
+        self.fov_coords = {'x0': 0, 'y0': 0,
+                           'x1': int(self.canvas['width']), 'y1': int(self.canvas['height']) / 2}
 
+    def activate_draw(self):
         self.canvas.bind('<Button-1>', self.on_button_press)
         self.canvas.bind('<B1-Motion>', self.on_move_press)
         self.canvas.bind('<ButtonRelease-1>', self.on_button_release)
+
+    def isin_fov(self):
+        in_x_bounds = self.fov_coords['x0'] <= self.start_x <= self.fov_coords['x1']
+        in_y_bounds = self.fov_coords['y0'] <= self.start_y <= self.fov_coords['y1']
+        return in_x_bounds and in_y_bounds
 
     def on_button_press(self, event):
         # save mouse drag start position
         self.start_x = self.canvas.canvasx(event.x)
         self.start_y = self.canvas.canvasy(event.y)
-        # create rectangle if not yet exist
         if not self.rect:
             self.rect = self.canvas.create_rectangle(self.x, self.y, 1, 1, outline='red')
+            self.rect2 = self.canvas.create_rectangle(self.x, self.y + 225, 1, 1, outline='red')
 
     def on_move_press(self, event):
-        cur_x, cur_y = (event.x, event.y)
-        # expand rectangle as you drag the mouse
-        self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
+        if self.isin_fov():
+            cur_x, cur_y = (event.x, event.y)
+            # expand rectangle as you drag the mouse
+            self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
+            self.canvas.coords(self.rect2, self.start_x, self.start_y + 225, cur_x, cur_y + 225)
 
     def on_button_release(self, event):
         self.roi_coords = np.array(self.canvas.coords(self.rect))
@@ -66,7 +73,7 @@ class LeftPanel(ttk.Frame):
         self.fhz_frame.pack()
         self.fhz_label = ttk.Label(self.fhz_frame, text='SWE fhz:')
         self.fhz_label.pack(side='left', **options)
-        self.swe_fhz = ''
+        self.swe_fhz = None
         self.usr_value = tk.StringVar()
         self.usr_entry = ttk.Entry(self.fhz_frame, width=3, textvariable=self.usr_value)
         self.usr_entry.pack(side='left', **options)

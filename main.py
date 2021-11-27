@@ -24,6 +24,7 @@ class View(ttk.Frame):
 
         self.img_panel = ImgPanel(self)
         self.canvas = self.img_panel.canvas
+        self.fov_coords = None
         self.roi_coords = None
         self.n_frame = 0
         self.current_frame = 0
@@ -137,12 +138,14 @@ class View(ttk.Frame):
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
 
     def load_file(self):
-        self.ds, self.img_array, self.img_name = self.controller.get_dicom()
+        self.controller.get_dicom_data()
         self.current_array = self.img_array
         self.update_frame(self.current_frame)
         self.activate_slider(self.ds.NumberOfFrames)
+        self.img_panel.activate_draw()
         self.update_dcm_info()
         self.set_img_name()
+        self.img_panel.fov_coords = self.fov_coords
         self.left_panel.usr_entry.focus()
 
 
@@ -154,10 +157,14 @@ class Controller:
     def save_roi_coords(self, coords):
         self.data.roi_coords = coords
 
-    def get_dicom(self):
+    def get_dicom_data(self):
         # TODO: link to a ttk.Progressbar widget (dicom loading is a few seconds)
         self.data.load_dicom()
-        return self.data.ds, self.data.img_array, self.data.img_name
+        self.view.ds = self.data.ds
+        self.view.img_array = self.data.img_array
+        self.view.img_name = self.data.img_name
+        self.view.fov_coords = self.data.top_fov_coords
+        self.view.roi_coords = self.data.roi_coords
 
     def get_swe_array(self, swe_fhz):
         return self.data.resample(swe_fhz)
