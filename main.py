@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from tkinter import filedialog as fd
 
 from PIL import ImageTk, Image
 
@@ -32,7 +33,6 @@ class View(ttk.Frame):
         self.top = TopPanel(self)
 
         self.left_panel = LeftPanel(self)
-        self.left_panel.btn_open['command'] = self.load_file
         self.swe_fhz = self.left_panel.swe_fhz
         self.left_panel.usr_entry.bind('<Return>', self.get_usr_entry)
         self.left_panel.btn_analyse['command'] = self.analyse
@@ -138,7 +138,6 @@ class View(ttk.Frame):
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
 
     def load_file(self):
-        self.controller.get_dicom_data()
         self.current_array = self.img_array
         self.update_frame(self.current_frame)
         self.activate_slider(self.ds.NumberOfFrames)
@@ -151,6 +150,7 @@ class View(ttk.Frame):
 
 class Controller:
     def __init__(self, data, view):
+
         self.data = data
         self.view = view
 
@@ -165,6 +165,7 @@ class Controller:
         self.view.img_name = self.data.img_name
         self.view.fov_coords = self.data.top_fov_coords
         self.view.roi_coords = self.data.roi_coords
+        self.view.load_file()
 
     def get_swe_array(self, swe_fhz):
         return self.data.resample(swe_fhz)
@@ -174,7 +175,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        options = {'fill': 'x', 'padx': 5, 'pady': 5}
+        self.path = None
+        data, view = self.set_classes()
 
         self.title('SwePy')
         window_width = 960
@@ -183,13 +185,29 @@ class App(tk.Tk):
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
 
-        data = Data()
+        self.open_frame = ttk.Frame(self)
+        self.open_frame.grid(row=0, column=0, sticky=tk.W)
+        self.btn_open = ttk.Button(self.open_frame, text='Open dicom file')
+        self.btn_open['command'] = self.reset
+        self.btn_open.pack(fill='x', padx=5, pady=5)
 
+    def set_classes(self):
+        data = Data(self.path)
         view = View(self)
-        view.grid(row=0, column=0, rowspan=4, sticky=tk.NSEW)
+        view.grid(row=1, column=0, rowspan=4, sticky=tk.NSEW)
+        return data, view
 
+    def select_file(self):
+        filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
+        self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
+
+    def reset(self):
+        self.select_file()
+        data, view = self.set_classes()
+        data.path = self.path
         controller = Controller(data, view)
         view.set_controller(controller)
+        controller.get_dicom_data()
 
 
 if __name__ == '__main__':

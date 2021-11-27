@@ -66,9 +66,6 @@ class LeftPanel(ttk.Frame):
 
         self.grid(row=1, column=0, rowspan=2, sticky=tk.NSEW)
 
-        self.btn_open = ttk.Button(self, text='Open dicom file')
-        self.btn_open.pack(**options)
-
         self.fhz_frame = ttk.Frame(self)
         self.fhz_frame.pack()
         self.fhz_label = ttk.Label(self.fhz_frame, text='SWE fhz:')

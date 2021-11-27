@@ -6,9 +6,10 @@ from pydicom.pixel_data_handlers.util import convert_color_space
 
 
 class Data:
-    def __init__(self):
+    def __init__(self, path):
         super().__init__()
-        self.path = None
+        self.path = path
+        print(f'path in Data: {self.path}')
         self.img_name = None
         self.ds = None
         self.img_array = None
@@ -20,9 +21,13 @@ class Data:
         self.top_fov_coords = None
         self.bmode_fhz = None
 
-    def select_file(self):
-        filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
-        self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
+    # def select_file(self):
+    #     filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
+    #     self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
+
+    def get_img_name(self):
+        if self.path:
+            self.img_name = self.path.split('/')[-1]  # TODO: check that this works on Windows
 
     def define_rois(self):
         rois = self.ds.SequenceOfUltrasoundRegions._list
@@ -40,8 +45,10 @@ class Data:
         return coords
 
     def load_dicom(self):
-        self.select_file()
-        self.img_name = self.path.split('/')[-1]  # TODO: check that this works on Windows
+        print('Loading...')
+        # self.select_file()
+        # self.img_name = self.path.split('/')[-1]  # TODO: check that this works on Windows
+        self.get_img_name()
         self.ds = dcmread(self.path)
         self.define_rois()
         self.roi_coords = self.get_roi_coord(self.swe)
