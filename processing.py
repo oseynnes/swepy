@@ -2,6 +2,8 @@ import numpy as np
 from pydicom import dcmread
 from pydicom.pixel_data_handlers.util import convert_color_space
 
+from pathlib import Path
+
 
 class Data:
     def __init__(self, path):
@@ -20,7 +22,7 @@ class Data:
 
     def get_img_name(self):
         if self.path:
-            self.img_name = self.path.split('/')[-1]  # TODO: check that this works on Windows
+            self.img_name = self.path.name
 
     def define_rois(self):
         rois = self.ds.SequenceOfUltrasoundRegions._list

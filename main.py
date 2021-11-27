@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog as fd
 
+from pathlib import Path
+
 from PIL import ImageTk, Image
 
 import utils
@@ -201,7 +203,9 @@ class App(tk.Tk):
 
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
-        self.path = fd.askopenfilename(initialdir='/', title="Select dicom file", filetypes=filetypes)
+        initialdir = self.path.parent if self.path else '/'
+        path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
+        self.path = Path(path)
 
     def reset(self):
         self.select_file()
