@@ -48,7 +48,11 @@ class View(ttk.Frame):
         self.controller = controller
 
     def analyse(self):
-        self.controller.analyse()
+        if self.ds:
+            self.controller.analyse()
+        else:
+            utils.warn_no_video()
+            return
 
     def get_usr_entry(self, event):
         if self.ds:
@@ -71,6 +75,7 @@ class View(ttk.Frame):
                                   index=tk.END,
                                   iid='swe_row',
                                   values=('SWE Fhz', self.swe_fhz))
+        self.activate_arrowkeys()
 
     def get_swe_frames(self):
         self.swe_array = self.controller.get_swe_array(self.swe_fhz)
@@ -78,19 +83,20 @@ class View(ttk.Frame):
         self.controls.current_value.set(0)
         self.activate_slider(self.swe_array.shape[0])
         self.current_frame = 0
-        self.update_frame(self.current_frame)
+        self.update_frame()
 
     def update_slider(self, event):
         if int(self.controls.current_value.get()) < self.n_frame:
             self.current_frame = int(self.controls.current_value.get())
             self.controls.frame_label.config(text=f'{self.current_frame + 1}/{self.n_frame}')
-            self.update_frame(self.current_frame)
+            self.update_frame()
 
     def toggle_play_pause(self):
         if self.controls.pause:
             self.controls.pause = False
             self.controls.play_btn.config(text='Play')
             self.after_cancel(self.after_id)
+            self.canvas.focus_set()
         else:
             self.controls.pause = True
             self.controls.play_btn.config(text='Pause')
@@ -98,8 +104,7 @@ class View(ttk.Frame):
 
     def play_video(self):
         if self.ds:
-            self.controls.current_value.set(self.current_frame)
-            self.update_frame(self.current_frame)
+            self.update_frame()
             self.current_frame += 1
             if self.current_frame < self.n_frame:
                 self.after_id = self.after(50, self.play_video)  # 50ms
@@ -126,22 +131,35 @@ class View(ttk.Frame):
         self.controls.slider.config(to=self.n_frame)
         self.controls.slider.config(state='normal')  # activate slider
 
+    def activate_arrowkeys(self):
+        self.canvas.focus_set()
+        self.canvas.bind('<Left>', self.left_key)
+        self.canvas.bind('<Right>', self.right_key)
+
+    def left_key(self, event):
+        self.current_frame -= 1
+        self.update_frame()
+
+    def right_key(self, event):
+        self.current_frame += 1
+        self.update_frame()
+
     def set_img_name(self):
         self.top.img_name.config(text=self.img_name)
 
-    def update_frame(self, frame_idx):
-        self.img = ImageTk.PhotoImage(image=Image.fromarray(self.current_array[frame_idx]))
+    def update_frame(self):
+        self.controls.current_value.set(self.current_frame)
+        self.img = ImageTk.PhotoImage(image=Image.fromarray(self.current_array[self.current_frame]))
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
 
     def load_file(self):
         self.current_array = self.img_array
-        self.update_frame(self.current_frame)
+        self.update_frame()
         self.activate_slider(self.ds.NumberOfFrames)
         self.img_panel.activate_draw()
         self.update_dcm_info()
         self.set_img_name()
         self.img_panel.fov_coords = self.fov_coords
-        self.left_panel.usr_entry.focus()
 
 
 class Controller:
@@ -184,7 +202,7 @@ class App(tk.Tk):
 
         self.title('SwePy')
         window_width = 960
-        window_height = 650
+        window_height = 700
         utils.set_win_geometry(self, window_width, window_height)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
