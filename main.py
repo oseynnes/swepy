@@ -15,7 +15,6 @@ class View(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        # TODO: add function to reset attributes and widgets
         self.ds = None
         self.img_array = None
         self.swe_array = None
@@ -28,7 +27,8 @@ class View(ttk.Frame):
         self.img_panel = ImgPanel(self)
         self.canvas = self.img_panel.canvas
         self.fov_coords = None
-        self.roi_coords = None
+        self.init_roi_coords = None
+        self.roi_coords = self.img_panel.roi_coords
         self.n_frame = 0
         self.current_frame = 0
 
@@ -37,6 +37,7 @@ class View(ttk.Frame):
         self.left_panel = LeftPanel(self)
         self.swe_fhz = self.left_panel.swe_fhz
         self.left_panel.usr_entry.bind('<Return>', self.get_usr_entry)
+        self.left_panel.btn_reset_roi['command'] = self.reset_rois
         self.left_panel.btn_analyse['command'] = self.analyse
 
         self.controls = DisplayControls(self)
@@ -46,6 +47,10 @@ class View(ttk.Frame):
 
     def set_controller(self, controller):
         self.controller = controller
+
+    def reset_rois(self):
+        self.img_panel.roi_coords = self.init_roi_coords
+        self.img_panel.set_rois()
 
     def analyse(self):
         if self.ds:
@@ -151,15 +156,18 @@ class View(ttk.Frame):
         self.controls.current_value.set(self.current_frame)
         self.img = ImageTk.PhotoImage(image=Image.fromarray(self.current_array[self.current_frame]))
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
+        self.img_panel.set_rois()
 
     def load_file(self):
+        self.img_panel.fov_coords = self.fov_coords
+        self.img_panel.roi_coords = self.init_roi_coords
         self.current_array = self.img_array
         self.update_frame()
         self.activate_slider(self.ds.NumberOfFrames)
         self.img_panel.activate_draw()
         self.update_dcm_info()
         self.set_img_name()
-        self.img_panel.fov_coords = self.fov_coords
+
 
 
 class Controller:
@@ -178,14 +186,14 @@ class Controller:
         self.view.img_array = self.data.img_array
         self.view.img_name = self.data.img_name
         self.view.fov_coords = self.data.top_fov_coords
-        self.view.roi_coords = self.data.roi_coords
+        self.view.init_roi_coords = self.data.roi_coords
         self.view.load_file()
 
     def get_swe_array(self, swe_fhz):
         return self.data.resample(swe_fhz)
 
     def analyse(self):
-        self.data.roi_coords = self.view.img_panel.roi_coords  # TODO: choose to btw dictionary and array formats
+        self.data.roi_coords = self.view.img_panel.roi_coords
         # TODO: continue function:
         #                   - select roi in each frame
         #                   - filter voids

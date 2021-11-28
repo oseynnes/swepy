@@ -1,15 +1,13 @@
 import tkinter as tk
 from tkinter import ttk
 
-import numpy as np
-
 
 class ImgPanel(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.roi_coords = np.empty([4, ])
-        self.rect = self.start_x = self.start_y = None
+        self.roi_coords = None
+        self.rect1 = self.rect2 = self.start_x = self.start_y = None
         self.x = self.y = 0
 
         self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
@@ -28,23 +26,39 @@ class ImgPanel(ttk.Frame):
         in_y_bounds = self.fov_coords['y0'] <= self.start_y <= self.fov_coords['y1']
         return in_x_bounds and in_y_bounds
 
+    def set_rois(self):
+        if self.roi_coords:
+            self.draw_rois(self.roi_coords['x0'],
+                           self.roi_coords['y0'],
+                           self.roi_coords['x1'],
+                           self.roi_coords['y1'])
+
+    def draw_rois(self, x1, y1, x2, y2):
+        if self.rect1:
+            self.del_rois()
+        self.rect1 = self.canvas.create_rectangle(x1, y1, x2, y2, outline='red')
+        self.rect2 = self.canvas.create_rectangle(x1, y1 + 225, x2, y2 + 225, outline='red')
+
+    def del_rois(self):
+        self.canvas.delete(self.rect1, self.rect2)
+
     def on_button_press(self, event):
         # save mouse drag start position
         self.start_x = self.canvas.canvasx(event.x)
         self.start_y = self.canvas.canvasy(event.y)
-        if not self.rect:
-            self.rect = self.canvas.create_rectangle(self.x, self.y, 1, 1, outline='red')
-            self.rect2 = self.canvas.create_rectangle(self.x, self.y + 225, 1, 1, outline='red')
+        if not self.rect1:
+            self.draw_rois(self.x, self.y, 1, 1)
 
     def on_move_press(self, event):
+        # expand rectangle as you drag the mouse
         if self.isin_fov():
             cur_x, cur_y = (event.x, event.y)
-            # expand rectangle as you drag the mouse
-            self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
+            self.canvas.coords(self.rect1, self.start_x, self.start_y, cur_x, cur_y)
             self.canvas.coords(self.rect2, self.start_x, self.start_y + 225, cur_x, cur_y + 225)
 
     def on_button_release(self, event):
-        self.roi_coords = np.array(self.canvas.coords(self.rect))
+        keys = ('x0', 'y0', 'x1', 'y1')
+        self.roi_coords = dict(zip(keys, self.canvas.coords(self.rect1)))
 
 
 class TopPanel(ttk.Frame):
@@ -85,8 +99,11 @@ class LeftPanel(ttk.Frame):
         self.tv.column('value', width=100)
         self.tv.pack(**options)
 
+        self.btn_reset_roi = ttk.Button(self, text="Reset ROI")
+        self.btn_reset_roi.pack(**options)
+
         self.btn_analyse = ttk.Button(self, text="Analyse")
-        self.btn_analyse.pack(**options)  # TODO: link to methods (class?)
+        self.btn_analyse.pack(**options)
 
 
 class DisplayControls(ttk.Frame):
