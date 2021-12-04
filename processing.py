@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 class Data:
+    """Containing data from dicom file and analysis methods"""
     def __init__(self, path):
         super().__init__()
         self.path = path

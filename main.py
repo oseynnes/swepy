@@ -12,6 +12,7 @@ from ttk_frames import ImgPanel, TopPanel, LeftPanel, DisplayControls
 
 
 class View(ttk.Frame):
+    """Accessing tkinter frames composing the GUI"""
     def __init__(self, parent):
         super().__init__(parent)
 
@@ -80,7 +81,8 @@ class View(ttk.Frame):
                                   index=tk.END,
                                   iid='swe_row',
                                   values=('SWE Fhz', self.swe_fhz))
-        self.activate_arrowkeys()
+        # self.activate_arrowkeys()
+        self.canvas.focus_set()
 
     def get_swe_frames(self):
         self.swe_array = self.controller.get_swe_array(self.swe_fhz)
@@ -95,6 +97,7 @@ class View(ttk.Frame):
             self.current_frame = int(self.controls.current_value.get())
             self.controls.frame_label.config(text=f'{self.current_frame + 1}/{self.n_frame}')
             self.update_frame()
+            self.canvas.focus_set()
 
     def toggle_play_pause(self):
         if self.controls.pause:
@@ -142,18 +145,21 @@ class View(ttk.Frame):
         self.canvas.bind('<Right>', self.right_key)
 
     def left_key(self, event):
-        self.current_frame -= 1
-        self.update_frame()
+        if int(self.controls.current_value.get()) > 0:
+            self.current_frame -= 1
+            self.update_frame()
 
-    def right_key(self, event):
-        self.current_frame += 1
-        self.update_frame()
+    def right_key(self, event):  # TODO: test arrow keys functions
+        if int(self.controls.current_value.get()) < self.n_frame - 1:
+            self.current_frame += 1
+            self.update_frame()
 
     def set_img_name(self):
         self.top.img_name.config(text=self.img_name)
 
     def update_frame(self):
         self.controls.current_value.set(self.current_frame)
+        self.controls.frame_label.config(text=f'{self.current_frame + 1}/{self.n_frame}')
         self.img = ImageTk.PhotoImage(image=Image.fromarray(self.current_array[self.current_frame]))
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
         self.img_panel.set_rois()
@@ -167,10 +173,12 @@ class View(ttk.Frame):
         self.img_panel.activate_draw()
         self.update_dcm_info()
         self.set_img_name()
+        self.activate_arrowkeys()
 
 
 
 class Controller:
+    """Routing data between View (GUI) and Data (dicom) classes"""
     def __init__(self, data, view):
 
         self.data = data
@@ -202,6 +210,7 @@ class Controller:
 
 
 class App(tk.Tk):
+    """Root window of tkinter app"""
     def __init__(self):
         super().__init__()
 
@@ -230,8 +239,9 @@ class App(tk.Tk):
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
         initialdir = self.path.parent if self.path else '/'
-        path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
-        self.path = Path(path)
+        # path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
+        # self.path = Path(path)
+        self.path = Path('data/C0000004.dcm')  # temporary skip file dialogue during devel
 
     def reset(self):
         self.select_file()
@@ -246,4 +256,4 @@ if __name__ == '__main__':
     app = App()
     app.mainloop()
 
-    # TODO: add doctrings to class(es) and functions
+    # TODO: add doctrings to functions

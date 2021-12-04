@@ -3,6 +3,7 @@ from tkinter import ttk
 
 
 class ImgPanel(ttk.Frame):
+    """Panel of GUI displaying images"""
     def __init__(self, parent):
         super().__init__(parent)
 
@@ -62,6 +63,7 @@ class ImgPanel(ttk.Frame):
 
 
 class TopPanel(ttk.Frame):
+    """Panel of GUI displaying file name"""
     def __init__(self, parent):
         super().__init__(parent)
         options = {'fill': 'x', 'padx': 5, 'pady': 5}
@@ -73,6 +75,7 @@ class TopPanel(ttk.Frame):
 
 
 class LeftPanel(ttk.Frame):
+    """Panel of GUI displaying widgets related to file opening and analysis"""
     def __init__(self, parent):
         super().__init__(parent)
 
@@ -107,6 +110,7 @@ class LeftPanel(ttk.Frame):
 
 
 class DisplayControls(ttk.Frame):
+    """Panel of GUI displaying widgets to display images"""
     def __init__(self, parent):
         super().__init__(parent)
 
