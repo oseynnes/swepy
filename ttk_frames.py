@@ -2,6 +2,19 @@ import tkinter as tk
 from tkinter import ttk
 
 
+class StartPanel(ttk.Frame):
+    """Panel to reset app"""
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        self.grid(row=0, column=0, columnspan=2, sticky=tk.NSEW)
+
+        self.btn_open_frame = ttk.Frame(self)
+        self.btn_open_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
+        self.btn_open = ttk.Button(self.btn_open_frame, text='Open dicom file')
+        self.btn_open.pack(fill='x', padx=5, pady=5)
+
+
 class ImgPanel(ttk.Frame):
     """Panel of GUI displaying images"""
     def __init__(self, parent):
@@ -99,7 +112,7 @@ class LeftPanel(ttk.Frame):
         self.tv.heading('dcm_property', text="DCM Property")
         self.tv.column('dcm_property', width=100)
         self.tv.heading("value", text="Value")
-        self.tv.column('value', width=100)
+        self.tv.column('value', width=50)
         self.tv.pack(**options)
 
         self.btn_reset_roi = ttk.Button(self, text="Reset ROI")

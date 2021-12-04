@@ -6,9 +6,10 @@ from pathlib import Path
 
 from PIL import ImageTk, Image
 
+import ttk_frames
 import utils
 from processing import Data
-from ttk_frames import ImgPanel, TopPanel, LeftPanel, DisplayControls
+from ttk_frames import StartPanel, ImgPanel, TopPanel, LeftPanel, DisplayControls
 
 
 class View(ttk.Frame):
@@ -215,22 +216,19 @@ class App(tk.Tk):
         super().__init__()
 
         self.path = None
-        data, view = self.set_classes()
 
         self.title('SwePy')
-        window_width = 960
+        window_width = 900
         window_height = 700
         utils.set_win_geometry(self, window_width, window_height)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
 
-        self.open_frame = ttk.Frame(self)
-        self.open_frame.grid(row=0, column=0, sticky=tk.W)
-        self.btn_open = ttk.Button(self.open_frame, text='Open dicom file')
-        self.btn_open['command'] = self.reset
-        self.btn_open.pack(fill='x', padx=5, pady=5)
+        start = StartPanel(self)
+        start.btn_open['command'] = self.reset
+        data, view = self.set_view_classes()
 
-    def set_classes(self):
+    def set_view_classes(self):
         data = Data(self.path)
         view = View(self)
         view.grid(row=1, column=0, rowspan=4, sticky=tk.NSEW)
@@ -245,7 +243,7 @@ class App(tk.Tk):
 
     def reset(self):
         self.select_file()
-        data, view = self.set_classes()
+        data, view = self.set_view_classes()
         data.path = self.path
         controller = Controller(data, view)
         view.set_controller(controller)
