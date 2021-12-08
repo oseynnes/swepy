@@ -1,21 +1,20 @@
 import tkinter as tk
 from tkinter import ttk
-from tkinter import filedialog as fd
-
-from pathlib import Path
 
 from PIL import ImageTk, Image
 
-import ttk_frames
 import utils
 from processing import Data
-from ttk_frames import StartPanel, ImgPanel, TopPanel, LeftPanel, DisplayControls
+from ttk_frames import MenuBar, ImgPanel, TopPanel, LeftPanel, DisplayControls
 
 
 class View(ttk.Frame):
     """Accessing tkinter frames composing the GUI"""
+
     def __init__(self, parent):
         super().__init__(parent)
+
+        self.grid(row=0, column=0, rowspan=4, sticky=tk.NSEW)
 
         self.ds = None
         self.img_array = None
@@ -177,13 +176,13 @@ class View(ttk.Frame):
         self.activate_arrowkeys()
 
 
-
 class Controller:
     """Routing data between View (GUI) and Data (dicom) classes"""
-    def __init__(self, data, view):
 
+    def __init__(self, data, view, results):
         self.data = data
         self.view = view
+        self.results = results
 
     def save_roi_coords(self, coords):
         self.data.roi_coords = coords
@@ -210,43 +209,67 @@ class Controller:
         pass
 
 
-class App(tk.Tk):
-    """Root window of tkinter app"""
-    def __init__(self):
-        super().__init__()
+class Results(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
 
-        self.path = None
-
-        self.title('SwePy')
-        window_width = 900
-        window_height = 700
-        utils.set_win_geometry(self, window_width, window_height)
+        self.grid(row=0, column=0, columnspan=2, rowspan=4, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
 
-        start = StartPanel(self)
-        start.btn_open['command'] = self.reset
-        data, view = self.set_view_classes()
+        self.file_list_frame = ttk.LabelFrame(self, text='Analysed files')
+        self.file_list_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
+        test_btn = ttk.Button(self.file_list_frame)
+        test_btn.pack()
 
-    def set_view_classes(self):
-        data = Data(self.path)
-        view = View(self)
-        view.grid(row=1, column=0, rowspan=4, sticky=tk.NSEW)
-        return data, view
+        self.fig_frame = ttk.LabelFrame(self, text='Output')
+        self.canvas = tk.Canvas(self.fig_frame, bg='white')
+        self.canvas.grid(row=0, column=1, rowspan=4, sticky=tk.NSEW, padx=5, pady=5)
+        self.fig_frame.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
 
-    def select_file(self):
-        filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
-        initialdir = self.path.parent if self.path else '/'
-        # path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
-        # self.path = Path(path)
-        self.path = Path('data/C0000004.dcm')  # temporary skip file dialogue during devel
 
-    def reset(self):
-        self.select_file()
-        data, view = self.set_view_classes()
-        data.path = self.path
-        controller = Controller(data, view)
-        view.set_controller(controller)
+class App(tk.Tk):
+    """Root window of tkinter app"""
+
+    def __init__(self):
+        super().__init__()
+
+        self.title('SwePy')
+        window_width = 950
+        window_height = 690
+        utils.set_win_geometry(self, window_width, window_height)
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=4)
+        self.resizable(False, False)  # prevent resizing for now
+
+        self.path = None
+
+        self.mb = MenuBar(self)
+        self.config(menu=self.mb)
+
+        # create tab system
+        self.nb = ttk.Notebook(self)
+        self.nb.grid()
+        self.load_file()
+        self.results = Results(self.nb)
+        self.nb.add(self.view, text='Image processing')
+        self.nb.add(self.results, text='Results')
+        # TODO: try and implement display of results in its own tab
+
+    def load_file(self):
+        self.data = Data(self.path)
+        self.view = View(self.nb)
+
+    def reset(self, path=None):
+        self.path = path if path else self.mb.select_file()
+        utils.add_to_paths(str(self.path.resolve()))
+        self.nb.forget(self.view)
+        self.load_file()
+        self.data.path = self.path
+        self.nb.insert(0, self.view, text='Image processing')
+        self.nb.select(self.view)
+        controller = Controller(self.data, self.view, self.results)
+        self.view.set_controller(controller)
         controller.get_dicom_data()
 
 
@@ -254,4 +277,5 @@ if __name__ == '__main__':
     app = App()
     app.mainloop()
 
-    # TODO: add doctrings to functions
+    # TODO: - add doctrings to functions
+    #       - fix window and widgets resize

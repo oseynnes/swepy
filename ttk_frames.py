@@ -1,22 +1,51 @@
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
+import utils
 
-class StartPanel(ttk.Frame):
-    """Panel to reset app"""
+
+class MenuBar(tk.Menu):
+    """Adding menu bar"""
+
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.grid(row=0, column=0, columnspan=2, sticky=tk.NSEW)
+        self.app = parent
+        self.path = None
 
-        self.btn_open_frame = ttk.Frame(self)
-        self.btn_open_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
-        self.btn_open = ttk.Button(self.btn_open_frame, text='Open dicom file')
-        self.btn_open.pack(fill='x', padx=5, pady=5)
+        self.file_menu = tk.Menu(self, tearoff=0)
+        self.add_cascade(label='File', underline=0, menu=self.file_menu)
+        self.file_menu.add_command(label='Open...', command=lambda: self.app.reset())
+
+        recent_paths = tk.Menu(self.file_menu, tearoff=0)
+        paths_list = utils.fetch_recent_paths()
+        for path in paths_list:
+            recent_paths.add_command(label=path, command=lambda: self.app.reset(path))
+        self.file_menu.add_cascade(label='Open recent', menu=recent_paths)
+
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label='Export')  # TODO: Export results command
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label='Clear all results')  # TODO: Export results command
+        self.file_menu.add_command(label='Quit', command=quit)
+
+        self.help_menu = tk.Menu(self, tearoff=0)
+        self.add_cascade(label='Help', underline=0, menu=self.help_menu)
+        self.help_menu.add_command(label='Swepy README')
+
+    def select_file(self):
+        filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
+        initialdir = self.path.parent if self.path else '/'
+        # path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
+        # self.path = Path(path)
+        self.path = Path('data/C0000004.dcm')  # temporary skip file dialogue during devel
+        return self.path
 
 
 class ImgPanel(ttk.Frame):
     """Panel of GUI displaying images"""
+
     def __init__(self, parent):
         super().__init__(parent)
 
@@ -77,24 +106,26 @@ class ImgPanel(ttk.Frame):
 
 class TopPanel(ttk.Frame):
     """Panel of GUI displaying file name"""
+
     def __init__(self, parent):
         super().__init__(parent)
         options = {'fill': 'x', 'padx': 5, 'pady': 5}
 
         self.grid(row=0, column=1, sticky=tk.EW)
 
-        self.img_name = ttk.Label(self, anchor=tk.CENTER, text=None)
+        self.img_name = ttk.Label(self, anchor=tk.CENTER, text='')
         self.img_name.pack(**options)
 
 
 class LeftPanel(ttk.Frame):
     """Panel of GUI displaying widgets related to file opening and analysis"""
+
     def __init__(self, parent):
         super().__init__(parent)
 
         options = {'fill': 'x', 'padx': 5, 'pady': 5}
 
-        self.grid(row=1, column=0, rowspan=2, sticky=tk.NSEW)
+        self.grid(row=1, column=0, rowspan=3, sticky=tk.NSEW)
 
         self.fhz_frame = ttk.Frame(self)
         self.fhz_frame.pack()
@@ -124,10 +155,13 @@ class LeftPanel(ttk.Frame):
 
 class DisplayControls(ttk.Frame):
     """Panel of GUI displaying widgets to display images"""
+
     def __init__(self, parent):
         super().__init__(parent)
 
         self.grid(row=4, column=1, sticky=tk.EW)
+        # self.columnconfigure(1, weight=4)
+        # self.rowconfigure(4, weight=1)
 
         self.pause = False  # control video pause
         self.play_btn = ttk.Button(self, width=5, text="Play")
