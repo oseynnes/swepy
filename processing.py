@@ -9,6 +9,8 @@ class Data:
     """Containing data from dicom file and analysis methods"""
     def __init__(self, path):
         super().__init__()
+
+        color_bar = {'x0': 693, 'y0': 71, 'x1': 700, 'y1': 179}  # retrieved manually from IJ
         self.path = path
         self.img_name = None
         self.ds = None
@@ -51,6 +53,7 @@ class Data:
         self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
 
     def resample(self, swe_fhz=1.0):
+        """resample scan sequence to only retain 1st scans with unique SWE data"""
         if self.bmode_fhz % swe_fhz == 0:
             frame_step = int(self.bmode_fhz // swe_fhz)
         else:

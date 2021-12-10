@@ -21,7 +21,7 @@ class MenuBar(tk.Menu):
         recent_paths = tk.Menu(self.file_menu, tearoff=0)
         paths_list = utils.fetch_recent_paths()
         for path in paths_list:
-            recent_paths.add_command(label=path, command=lambda: self.app.reset(path))
+            recent_paths.add_command(label=path, command=lambda: self.app.reset(Path(path)))
         self.file_menu.add_cascade(label='Open recent', menu=recent_paths)
 
         self.file_menu.add_separator()
@@ -127,30 +127,48 @@ class LeftPanel(ttk.Frame):
 
         self.grid(row=1, column=0, rowspan=3, sticky=tk.NSEW)
 
-        self.fhz_frame = ttk.Frame(self)
-        self.fhz_frame.pack()
-        self.fhz_label = ttk.Label(self.fhz_frame, text='SWE fhz:')
-        self.fhz_label.pack(side='left', **options)
-        self.swe_fhz = None
-        self.usr_value = tk.StringVar()
-        self.usr_entry = ttk.Entry(self.fhz_frame, width=3, textvariable=self.usr_value)
-        self.usr_entry.pack(side='left', **options)
+        self.input_frame = ttk.LabelFrame(self, text='User input')
+        self.input_frame.grid(row=0, column=0, sticky=tk.NSEW)
 
+        self.fhz_label = ttk.Label(self.input_frame, text='SWE fhz:')
+        self.fhz_label.grid(column=0, row=0, sticky=tk.W, padx=5)
+        # self.swe_fhz = None
+        self.usr_fhz = tk.StringVar()
+        self.fhz_entry = ttk.Entry(self.input_frame, width=3, textvariable=self.usr_fhz)
+        self.fhz_entry.grid(column=1, row=0, sticky=tk.E, padx=5)
+
+        self.scale_label = ttk.Label(self.input_frame, text='max. scale:')
+        self.scale_label.grid(column=0, row=1, sticky=tk.W, padx=5)
+        # self.max_scale = None
+        self.usr_scale = tk.StringVar()
+        self.scale_entry = ttk.Entry(self.input_frame, width=3, textvariable=self.usr_scale)
+        self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5)
+
+        self.enter_btn = ttk.Button(self.input_frame, text='OK', width=2)
+        self.enter_btn.grid(column=1, row=3, sticky=tk.E, padx=5, pady=5)
+
+        self.space_frame = ttk.Frame(self)
+        self.space_frame.grid(row=1, column=0, sticky=tk.NSEW)
+        spacer = tk.Label(self.space_frame, text='')
+        spacer.grid()
+
+        self.tree_frame = ttk.Frame(self)
+        self.tree_frame.grid(row=2, column=0, sticky=tk.NSEW)
         columns = ('dcm_property', 'value')
         self.variables = ('No. of frames', 'No. of rows', 'No. of columns', 'B mode Fhz')
         self.values = (None,)
-        self.tv = ttk.Treeview(self, columns=columns, show='headings')
+        self.tv = ttk.Treeview(self.tree_frame, columns=columns, show='headings')
         self.tv.heading('dcm_property', text="DCM Property")
         self.tv.column('dcm_property', width=100)
         self.tv.heading("value", text="Value")
         self.tv.column('value', width=50)
-        self.tv.pack(**options)
+        self.tv.grid(sticky=tk.NSEW)
 
-        self.btn_reset_roi = ttk.Button(self, text="Reset ROI")
-        self.btn_reset_roi.pack(**options)
+        self.reset_roi_btn = ttk.Button(self.tree_frame, text="Reset ROI", width=8)
+        self.reset_roi_btn.grid(sticky=tk.W)
 
-        self.btn_analyse = ttk.Button(self, text="Analyse")
-        self.btn_analyse.pack(**options)
+        self.analyse_btn = ttk.Button(self.tree_frame, text="Analyse", width=8)
+        self.analyse_btn.grid(sticky=tk.W)
 
 
 class DisplayControls(ttk.Frame):

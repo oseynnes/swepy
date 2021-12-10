@@ -36,10 +36,12 @@ class View(ttk.Frame):
         self.top = TopPanel(self)
 
         self.left_panel = LeftPanel(self)
-        self.swe_fhz = self.left_panel.swe_fhz
-        self.left_panel.usr_entry.bind('<Return>', self.get_usr_entry)
-        self.left_panel.btn_reset_roi['command'] = self.reset_rois
-        self.left_panel.btn_analyse['command'] = self.analyse
+        # self.swe_fhz = self.left_panel.swe_fhz
+        # self.max_scale = self.left_panel.max_scale
+        # self.left_panel.fhz_entry.bind('<Return>', self.get_usr_entry)
+        self.left_panel.enter_btn['command'] = self.get_usr_entry
+        self.left_panel.reset_roi_btn['command'] = self.reset_rois
+        self.left_panel.analyse_btn['command'] = self.analyse
 
         self.controls = DisplayControls(self)
         self.controls.slider['command'] = self.update_slider
@@ -60,29 +62,22 @@ class View(ttk.Frame):
             utils.warn_no_video()
             return
 
-    def get_usr_entry(self, event):
+    def get_usr_entry(self):
         if self.ds:
-            self.save_fhz(event)
+            self.swe_fhz = utils.log_entry('SWE Fhz',
+                                           self.left_panel.usr_fhz,
+                                           self.left_panel.tv,
+                                           'swe_row')
+            self.max_scale = utils.log_entry('max. scale',
+                                             self.left_panel.usr_scale,
+                                             self.left_panel.tv,
+                                             'scale_row',
+                                             var_type=int)
             self.get_swe_frames()
+            self.canvas.focus_set()
         else:
             utils.warn_no_video()
             return
-
-    def save_fhz(self, event):
-        try:
-            float(self.left_panel.usr_value.get())
-        except ValueError:
-            utils.warn_no_number()
-            return
-        self.swe_fhz = float(self.left_panel.usr_value.get())
-        if 'swe_row' in self.left_panel.tv.get_children():
-            self.left_panel.tv.delete('swe_row')
-        self.left_panel.tv.insert(parent='',
-                                  index=tk.END,
-                                  iid='swe_row',
-                                  values=('SWE Fhz', self.swe_fhz))
-        # self.activate_arrowkeys()
-        self.canvas.focus_set()
 
     def get_swe_frames(self):
         self.swe_array = self.controller.get_swe_array(self.swe_fhz)
@@ -202,6 +197,7 @@ class Controller:
 
     def analyse(self):
         self.data.roi_coords = self.view.img_panel.roi_coords
+        print(self.data.roi_coords)
         # TODO: continue function:
         #                   - select roi in each frame
         #                   - filter voids
@@ -209,23 +205,53 @@ class Controller:
         pass
 
 
-class Results(ttk.Frame):
+class Results(ttk.Frame):  # TODO: move to other module
+    """Tab frame containing analysis results"""
+
     def __init__(self, parent):
         super().__init__(parent)
 
         self.grid(row=0, column=0, columnspan=2, rowspan=4, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=4)
+        self.columnconfigure(1, weight=3)
 
-        self.file_list_frame = ttk.LabelFrame(self, text='Analysed files')
-        self.file_list_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
-        test_btn = ttk.Button(self.file_list_frame)
-        test_btn.pack()
+        self.files_frame = ttk.LabelFrame(self, text='Analysed files')
+        self.files_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.N)
+        columns = ('file_name', 'path')
+        self.tv = ttk.Treeview(self.files_frame, columns=columns, show='headings')
+        self.tv.heading('file_name', text='File')
+        self.tv.column('file_name', width=100)
+        self.tv.heading('path', text='Path')
+        self.tv.column('path', width=200)
+        self.files = []
+        self.tv.bind('<<TreeviewSelect>>', self.file_selected)
+        self.tv.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NSEW)
+
+        self.add_scrollbars(self.files_frame)  # TODO: fix scroll bar
 
         self.fig_frame = ttk.LabelFrame(self, text='Output')
-        self.canvas = tk.Canvas(self.fig_frame, bg='white')
-        self.canvas.grid(row=0, column=1, rowspan=4, sticky=tk.NSEW, padx=5, pady=5)
+        self.canvas = tk.Canvas(self.fig_frame, width=500, height=500, bg='white')
+        self.canvas.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
         self.fig_frame.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
+
+    def add_scrollbars(self, container):
+        sb_x = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.tv.xview)
+        sb_y = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.tv.yview)
+        self.tv.configure(xscrollcommand=sb_x.set, yscrollcommand=sb_y.set)
+        sb_x.grid(row=4, column=0, sticky='ew')
+        sb_y.grid(row=0, column=1, sticky='ns')
+
+    def add_to_list(self, path):
+        self.files.append((path.name, path.resolve().parent))
+        self.tv.insert('', tk.END, values=self.files[-1])
+
+    def file_selected(self, event):
+        # TODO: implement method to display corresponding information in fig_frame
+        for selected_item in self.tv.selection():
+            item = self.tv.item(selected_item)
+            record = item['values']
+            print(f"{', '.join(record)}")
+        pass
 
 
 class App(tk.Tk):
@@ -257,15 +283,18 @@ class App(tk.Tk):
         # TODO: try and implement display of results in its own tab
 
     def load_file(self):
+        """Instantiate classes specific to a file"""
         self.data = Data(self.path)
         self.view = View(self.nb)
 
     def reset(self, path=None):
+        """Reset file processing"""
         self.path = path if path else self.mb.select_file()
-        utils.add_to_paths(str(self.path.resolve()))
+        utils.save_path(str(self.path.resolve()))
         self.nb.forget(self.view)
         self.load_file()
         self.data.path = self.path
+        self.results.add_to_list(self.path)
         self.nb.insert(0, self.view, text='Image processing')
         self.nb.select(self.view)
         controller = Controller(self.data, self.view, self.results)
