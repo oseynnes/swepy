@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from tkinter.messagebox import showinfo, showerror
 import tkinter as tk
+import numpy as np
 
 
 def warn_no_video():
@@ -9,7 +10,8 @@ def warn_no_video():
 
 
 def warn_wrong_entry():
-    showerror(title='Wrong input', message='Please inform both entry fields with a number')
+    showerror(title='Wrong input',
+              message='Please inform both the frequency and scale fields with a number')
 
 
 def set_win_geometry(container, width, height):
@@ -94,3 +96,24 @@ def log_entry(name, string_var, ttk_table, row, var_type=float):
                      values=(name, var_type(string_var.get())))
     return var_type(string_var.get())
 
+
+def closest_rgb(roi_rgb, color_profile_rgb):
+    """
+    Return indices of closest RGB values from scale to input RGB value
+    :param roi_rgb: region of interest array
+    :param color_profile_rgb: color scale array
+    :return: array of scale_height indices
+    """
+    if len(roi_rgb.shape) == 3:
+        roi_rgb = roi_rgb[np.newaxis, :, :, np.newaxis, :]
+    elif len(roi_rgb.shape) == 4:
+        roi_rgb = roi_rgb[:, :, :, np.newaxis, :]
+    else:
+        print(f'roi_rgb shape: {roi_rgb.shape}')
+        raise ValueError('The ROI array must have 3 or 4 dimensions')
+    # assert len(roi_rgb.shape) == 3, 'ROI array must be three-dimensional (H, W, 3)'
+    assert len(color_profile_rgb.shape) == 2, 'Color scale array must be two-dimensional (H, 3)'
+    rgb_distances = np.sqrt(np.sum((roi_rgb - color_profile_rgb) ** 2, axis=-1))
+    # indices of closest corresponding RGB value in color bar
+    min_indices = rgb_distances.argmin(-1)
+    return min_indices

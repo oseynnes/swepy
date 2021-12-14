@@ -2,7 +2,10 @@ import tkinter as tk
 from tkinter import ttk
 
 from PIL import ImageTk, Image
-
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
+                                               NavigationToolbar2Tk)
+from matplotlib.figure import Figure
+import numpy as np
 import utils
 from processing import Data
 from ttk_frames import MenuBar, ImgPanel, TopPanel, LeftPanel, DisplayControls
@@ -36,8 +39,8 @@ class View(ttk.Frame):
         self.top = TopPanel(self)
 
         self.left_panel = LeftPanel(self)
-        # self.swe_fhz = self.left_panel.swe_fhz
-        # self.max_scale = self.left_panel.max_scale
+        self.swe_fhz = None
+        self.max_scale = None
         # self.left_panel.fhz_entry.bind('<Return>', self.get_usr_entry)
         self.left_panel.enter_btn['command'] = self.get_usr_entry
         self.left_panel.reset_roi_btn['command'] = self.reset_rois
@@ -144,7 +147,7 @@ class View(ttk.Frame):
             self.current_frame -= 1
             self.update_frame()
 
-    def right_key(self, event):  # TODO: test arrow keys functions
+    def right_key(self, event):
         if int(self.controls.current_value.get()) < self.n_frame - 1:
             self.current_frame += 1
             self.update_frame()
@@ -196,12 +199,15 @@ class Controller:
         return self.data.resample(swe_fhz)
 
     def analyse(self):
+        if not all([self.view.swe_fhz, self.view.max_scale]):
+            utils.warn_wrong_entry()
+            return
+        self.data.swe_fhz = self.view.swe_fhz
+        self.data.max_scale = self.view.max_scale
         self.data.roi_coords = self.view.img_panel.roi_coords
-        print(self.data.roi_coords)
-        # TODO: continue function:
-        #                   - select roi in each frame
-        #                   - filter voids
-        #                   - get relevant variables of SWE from RGB values in ROI and scale bar
+        self.data.get_data_values(self.data.get_rois())
+        self.results.replot_data(self.data.mapped_values)
+        # TODO: continue function
         pass
 
 
@@ -230,9 +236,38 @@ class Results(ttk.Frame):  # TODO: move to other module
         self.add_scrollbars(self.files_frame)  # TODO: fix scroll bar
 
         self.fig_frame = ttk.LabelFrame(self, text='Output')
-        self.canvas = tk.Canvas(self.fig_frame, width=500, height=500, bg='white')
-        self.canvas.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
         self.fig_frame.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
+
+    def replot_data(self, D):  # TODO: fix display of new figures (to replace previous one)
+        for widget in self.fig_frame.winfo_children():
+            widget.destroy()
+
+        frame_dim = D.shape[0]
+        plot_data = D.reshape(frame_dim, -1)
+
+        figure = Figure(figsize=(6, 4), dpi=100)
+        figure_canvas = FigureCanvasTkAgg(figure, self.fig_frame)
+        NavigationToolbar2Tk(figure_canvas, self.fig_frame)
+        axes = figure.add_subplot()
+
+        vp = axes.violinplot(plot_data.tolist(), widths=1,
+                             showmeans=False, showmedians=True, showextrema=False)
+
+        for body in vp['bodies']:
+            body.set_facecolor('#D43F3A')
+            body.set_alpha(1)
+            body.set_edgecolor('black')
+
+        vp['cmedians'].set_color('black')
+        axes.annotate('test', (100, 0))
+
+        axes.set_xlabel('SWE frames')
+        axes.set_ylabel('Median shear wave modulus (KPa)')
+        axes.set_title(f'Median: {int(np.median(D))}, '
+                       f'Mean: {int(D.mean())}, '
+                       f'STD: {int(np.std(D))}')
+
+        figure_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
     def add_scrollbars(self, container):
         sb_x = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.tv.xview)

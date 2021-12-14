@@ -102,6 +102,7 @@ class ImgPanel(ttk.Frame):
     def on_button_release(self, event):
         keys = ('x0', 'y0', 'x1', 'y1')
         self.roi_coords = dict(zip(keys, self.canvas.coords(self.rect1)))
+        self.roi_coords = {k: int(v) for k, v in self.roi_coords.items()}
 
 
 class TopPanel(ttk.Frame):
@@ -134,14 +135,14 @@ class LeftPanel(ttk.Frame):
         self.fhz_label.grid(column=0, row=0, sticky=tk.W, padx=5)
         # self.swe_fhz = None
         self.usr_fhz = tk.StringVar()
-        self.fhz_entry = ttk.Entry(self.input_frame, width=3, textvariable=self.usr_fhz)
+        self.fhz_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_fhz)
         self.fhz_entry.grid(column=1, row=0, sticky=tk.E, padx=5)
 
         self.scale_label = ttk.Label(self.input_frame, text='max. scale:')
         self.scale_label.grid(column=0, row=1, sticky=tk.W, padx=5)
         # self.max_scale = None
         self.usr_scale = tk.StringVar()
-        self.scale_entry = ttk.Entry(self.input_frame, width=3, textvariable=self.usr_scale)
+        self.scale_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_scale)
         self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5)
 
         self.enter_btn = ttk.Button(self.input_frame, text='OK', width=2)
