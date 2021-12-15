@@ -177,10 +177,10 @@ class View(ttk.Frame):
 class Controller:
     """Routing data between View (GUI) and Data (dicom) classes"""
 
-    def __init__(self, data, view, results):
+    def __init__(self, data, view, output):
         self.data = data
         self.view = view
-        self.results = results
+        self.output = output
 
     def save_roi_coords(self, coords):
         self.data.roi_coords = coords
@@ -206,20 +206,24 @@ class Controller:
         self.data.max_scale = self.view.max_scale
         self.data.roi_coords = self.view.img_panel.roi_coords
         self.data.get_data_values(self.data.get_rois())
-        self.results.replot_data(self.data.mapped_values)
+        self.output.replot_data(self.data.results['raw'][self.data.source_var],
+                                self.data.source_var)
+        self.output.results = self.data.results
         # TODO: continue function
         pass
 
 
-class Results(ttk.Frame):  # TODO: move to other module
-    """Tab frame containing analysis results"""
+class Output(ttk.Frame):  # TODO: move to other module
+    """Tab frame displaying analysis output"""
 
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.grid(row=0, column=0, columnspan=2, rowspan=4, sticky=tk.NSEW)
+        self.grid(row=0, column=0, columnspan=2, rowspan=5, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
+
+        self.results = None
 
         self.files_frame = ttk.LabelFrame(self, text='Analysed files')
         self.files_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.N)
@@ -238,10 +242,43 @@ class Results(ttk.Frame):  # TODO: move to other module
         self.fig_frame = ttk.LabelFrame(self, text='Output')
         self.fig_frame.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
 
-    def replot_data(self, D):  # TODO: fix display of new figures (to replace previous one)
+        self.lf = ttk.LabelFrame(self, text='Variable')
+        self.lf.grid(row=5, column=1, padx=5, pady=5)
+        self.label_var = tk.StringVar()
+        self.y_labels = {'velocity': 'Wave velocity (m/s)',
+                         'shear_m': 'Shear modulus (KPa)',
+                         'youngs_m': "Young's modulus (KPa"}
+        grid_column = 0
+        for key, label in self.y_labels.items():
+            radio = ttk.Radiobutton(self.lf,
+                                    text=label,
+                                    value=key,
+                                    command=self.change_plot,
+                                    variable=self.label_var)
+            radio.grid(column=grid_column, row=0, ipadx=10, ipady=10)
+            grid_column += 1
+
+    def change_variable(self):
+        self.var = self.label_var.get()
+
+    def change_plot(self):
+        if self.results is None:
+            return
+        self.change_variable()
+        D = self.results['raw'][self.var]
+        self.replot_data(D, self.var)
+
+    def replot_data(self, D, swe_var):
+        """Reset widgets to plot new data
+        Args:
+            D: data 3D array of shape (n frames, height, width).
+        Returns: None
+        """
+        # TODO: implement plot of other variables on the same canvas (ttk.Radiobutton?)
         for widget in self.fig_frame.winfo_children():
             widget.destroy()
-
+        swe_vars = ['velocity', 'shear_m', 'youngs_m']
+        assert (swe_var in swe_vars), "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
         frame_dim = D.shape[0]
         plot_data = D.reshape(frame_dim, -1)
 
@@ -251,18 +288,28 @@ class Results(ttk.Frame):  # TODO: move to other module
         axes = figure.add_subplot()
 
         vp = axes.violinplot(plot_data.tolist(), widths=1,
-                             showmeans=False, showmedians=True, showextrema=False)
+                             showmeans=True, showmedians=True, showextrema=False)
 
         for body in vp['bodies']:
             body.set_facecolor('#D43F3A')
             body.set_alpha(1)
-            body.set_edgecolor('black')
+            body.set_edgecolor('#473535')
 
-        vp['cmedians'].set_color('black')
-        axes.annotate('test', (100, 0))
+        vp['cmeans'].set_color('#473535')
+        vp['cmedians'].set_color('white')
+
+        std = np.std(D, axis=(1, 2))
+        xy = [[l.vertices[:, 0].mean(), l.vertices[0, 1]] for l in vp['cmeans'].get_paths()]
+        xy = np.array(xy)
+        axes.vlines(xy[:, 0],
+                    ymin=xy[:, 1] - std,
+                    ymax=xy[:, 1] + std,
+                    color='#473535',
+                    lw=3,
+                    zorder=1)
 
         axes.set_xlabel('SWE frames')
-        axes.set_ylabel('Median shear wave modulus (KPa)')
+        axes.set_ylabel(self.y_labels[swe_var])
         axes.set_title(f'Median: {int(np.median(D))}, '
                        f'Mean: {int(D.mean())}, '
                        f'STD: {int(np.std(D))}')
@@ -312,10 +359,9 @@ class App(tk.Tk):
         self.nb = ttk.Notebook(self)
         self.nb.grid()
         self.load_file()
-        self.results = Results(self.nb)
+        self.output = Output(self.nb)
         self.nb.add(self.view, text='Image processing')
-        self.nb.add(self.results, text='Results')
-        # TODO: try and implement display of results in its own tab
+        self.nb.add(self.output, text='Results')
 
     def load_file(self):
         """Instantiate classes specific to a file"""
@@ -329,10 +375,10 @@ class App(tk.Tk):
         self.nb.forget(self.view)
         self.load_file()
         self.data.path = self.path
-        self.results.add_to_list(self.path)
+        self.output.add_to_list(self.path)
         self.nb.insert(0, self.view, text='Image processing')
         self.nb.select(self.view)
-        controller = Controller(self.data, self.view, self.results)
+        controller = Controller(self.data, self.view, self.output)
         self.view.set_controller(controller)
         controller.get_dicom_data()
 

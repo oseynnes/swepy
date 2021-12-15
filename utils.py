@@ -1,7 +1,9 @@
 import json
+import math
+import tkinter as tk
 from pathlib import Path
 from tkinter.messagebox import showinfo, showerror
-import tkinter as tk
+
 import numpy as np
 
 
@@ -99,10 +101,13 @@ def log_entry(name, string_var, ttk_table, row, var_type=float):
 
 def closest_rgb(roi_rgb, color_profile_rgb):
     """
-    Return indices of closest RGB values from scale to input RGB value
-    :param roi_rgb: region of interest array
-    :param color_profile_rgb: color scale array
-    :return: array of scale_height indices
+    Get indices of closest RGB values from scale to input RGB value
+    Args:
+        roi_rgb: region of interest array
+        color_profile_rgb: color scale array
+
+    Returns: array of scale_height indices
+
     """
     if len(roi_rgb.shape) == 3:
         roi_rgb = roi_rgb[np.newaxis, :, :, np.newaxis, :]
@@ -111,9 +116,96 @@ def closest_rgb(roi_rgb, color_profile_rgb):
     else:
         print(f'roi_rgb shape: {roi_rgb.shape}')
         raise ValueError('The ROI array must have 3 or 4 dimensions')
-    # assert len(roi_rgb.shape) == 3, 'ROI array must be three-dimensional (H, W, 3)'
     assert len(color_profile_rgb.shape) == 2, 'Color scale array must be two-dimensional (H, 3)'
     rgb_distances = np.sqrt(np.sum((roi_rgb - color_profile_rgb) ** 2, axis=-1))
     # indices of closest corresponding RGB value in color bar
     min_indices = rgb_distances.argmin(-1)
     return min_indices
+
+
+def convert_shear_m(mu, to_unit, decimals=4, rho=1000):
+    """
+    convert shear modulus to shear wave velocity or Young's modulus
+    Args:
+        mu (float): shear modulus (kPa) to convert
+        to_unit (str): variable to convert to. "velocity" or "youngs_m"
+        decimals (int): number of decimals to round to
+        rho (float): tissue density. Default: 1000 kg m-3 for skeletal muscle
+
+    Returns: target conversion
+
+    """
+    assert (to_unit in {'velocity', 'youngs_m'}), \
+        "'to_unit' can only be 'velocity' or 'youngs_m'"
+    velocity = np.round(np.sqrt(mu * 1000 / rho), decimals)
+    epsilon = np.round(3 * mu, decimals)
+    return velocity if to_unit == 'velocity' else epsilon
+
+
+def convert_youngs_m(epsilon, to_unit, decimals=4, rho=1000):
+    """convert Young's modulus to shear wave velocity or shear modulus
+    Args:
+        epsilon (float): Young's modulus (kPa) to convert
+        to_unit (str): variable to convert to. "velocity" or "shear_m"
+        decimals (int): number of decimals to round to
+        rho (float): tissue density. Default: 1000 kg m-3 for skeletal muscle
+
+    Returns: target conversion
+
+    """
+    assert (to_unit in {'velocity', 'shear_m'}), \
+        "'to_unit' can only be 'velocity' or 'shear_m'"
+    mu = np.round(epsilon / 3, decimals)
+    velocity = np.round(np.sqrt(mu * 1000 / rho), decimals)
+    return velocity if to_unit == 'velocity' else mu
+
+
+def convert_velocity(velocity, to_unit, decimals=4, rho=1000):
+    """convert shear wave velocity to shear modulus or Young's modulus
+    Args:
+        velocity (float): shear wave velocity (m/s) to convert
+        to_unit (str): variable to convert to. "shear_m" or "youngs_m"
+        decimals (int): number of decimals to round to
+        rho (float): tissue density. Default: 1000 kg m-3 for skeletal muscle
+
+    Returns: target conversion
+
+    """
+    assert (to_unit in {'shear_m', 'youngs_m'}), \
+        "'to_unit' can only be 'shear_m' or 'youngs_m'"
+    mu = np.round((rho * velocity ** 2) / 1000, decimals)
+    epsilon = np.round(3 * mu, decimals)
+    return mu if to_unit == 'shear_m' else epsilon
+
+
+def convert_swe(value, swe_var, to_unit, decimals=4, rho=1000):
+    """convert variable measured from shear wave elastography
+    Args:
+        value (float): value
+        swe_var (str): variable to convert from. "velocity, "shear_m" or "youngs_m"
+        to_unit (str): variable to convert to. "velocity, "shear_m" or "youngs_m"
+        decimals (int): number of decimals to round to
+        rho (float): tissue density. Default: 1000 kg m-3 for skeletal muscle
+
+    Returns: target conversion
+
+    """
+    swe_vars = ('velocity', 'shear_m', 'youngs_m')
+    functions = (convert_velocity, convert_shear_m, convert_youngs_m)
+    f = dict(zip(swe_vars, functions))
+    assert (swe_var in swe_vars), "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
+    assert (to_unit in swe_vars), "'to_unit' can only be 'velocity', 'shear_m' or 'youngs_m'"
+    return f[swe_var](value, to_unit, decimals, rho)
+
+
+def get_area(coords):
+    """Calculate rectangular area
+    Args:
+        coords (dict): roi coordinates
+
+    Returns: area in pixel
+
+    """
+    l1 = coords['x1'] - coords['x0']
+    l2 = coords['y1'] - coords['y0']
+    return l1 * l2

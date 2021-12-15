@@ -1,7 +1,8 @@
 import numpy as np
 from pydicom import dcmread
 from pydicom.pixel_data_handlers.util import convert_color_space
-
+import numpy as np
+import pandas as pd
 import utils
 
 
@@ -24,6 +25,7 @@ class Data:
         self.bmode_fhz = None
         self.swe_fhz = None
         self.max_scale = None
+        self.results = None
 
     def get_img_name(self):
         if self.path:
@@ -98,31 +100,30 @@ class Data:
         indices = utils.closest_rgb(rois, self.colour_profile)
         self.mapped_values = self.real_values[indices]
 
+        self.create_output_df()
+
         self.mean = self.mapped_values.mean()
         self.median = np.median(self.mapped_values)
-        # TODO: make dataframe with each variable as column
-        print(f'mean shape: {self.mapped_values.mean(axis=(1, 2)).shape}')
-        print(f'median shape: {np.median(self.mapped_values, axis=(1, 2)).shape}')
         # print(f'Mean modulus matched RGBs (KPa):    {dict(zip(np.arange(indices.shape[0]), mean))}')
         # print(f'Median modulus matched RGBs(KPa):   {dict(zip(np.arange(indices.shape[0]), median))}')
 
+    def create_output_df(self):
+        # TODO: implement method to detect variable measured in SWE scans (assume shear_m here)
+        self.source_var = 'youngs_m'
+        target_vars = ['velocity', 'shear_m', 'youngs_m']
+        d = {'raw': {}, 'stats': {}}
+        for target_var in target_vars:
+            if target_var == self.source_var:
+                d['raw'][target_var] = self.mapped_values
+            else:
+                d['raw'][target_var] = utils.convert_swe(self.mapped_values,
+                                                         self.source_var,
+                                                         target_var)
 
-# # Method 1: RGB stats -> match -> module ####################################
-# # Get SWE RGB stats
-# mean_rgb = swe_roi_arr.mean(axis=(0, 1), dtype=int)
-# std_rgb = np.std(swe_roi_arr, axis=(0, 1))
-# rgbs, count = np.unique(swe_roi_arr.reshape(-1, 3), axis=0, return_counts=True)
-# mode_rgb_idx = int(np.where(count == np.amax(count))[0])
-# mode_rgb = rgbs[mode_rgb_idx]
+            d['stats']['_'.join((target_var, 'median'))] = np.median(d['raw'][target_var], axis=(1, 2))
+            d['stats']['_'.join((target_var, 'mean'))] = d['raw'][target_var].mean(axis=(1, 2))
 
-# index = utils.closest_rgb(mean_rgb, color_profile)
-# mapped_value = real_values[index]
-# print(f'Mean modulus from mean RGB:   {int(mapped_value)}KPa')
-# mode_module1 = real_values[utils.closest_rgb(mode_rgb, color_profile)]
-# print(f'Mode modulus from mode RGB:   {int(mode_module1)}KPa')
+        # data['ROI area'] = np.full((12,), utils.get_area(self.roi_coords))
+        self.results = d
+        self.df = pd.DataFrame.from_dict(d['stats'])
 
-# # Method 2: RGB match -> stats -> module ####################################
-# indices = utils.closest_rgb(swe_roi_arr, color_profile)
-# mapped_values = real_values[indices]
-# mean = mapped_values.mean(axis=(0, 1))
-# print(f'Mean modulus matched RGBs:    {int(mean)}KPa')
