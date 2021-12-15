@@ -1,6 +1,7 @@
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
+import tkinter.filedialog as fd
 
 import utils
 
@@ -21,7 +22,7 @@ class MenuBar(tk.Menu):
         recent_paths = tk.Menu(self.file_menu, tearoff=0)
         paths_list = utils.fetch_recent_paths()
         for path in paths_list:
-            recent_paths.add_command(label=path, command=lambda: self.app.reset(Path(path)))
+            recent_paths.add_command(label=path, command=lambda x=Path(path): self.app.reset(x))
         self.file_menu.add_cascade(label='Open recent', menu=recent_paths)
 
         self.file_menu.add_separator()
@@ -37,9 +38,9 @@ class MenuBar(tk.Menu):
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
         initialdir = self.path.parent if self.path else '/'
-        # path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
-        # self.path = Path(path)
-        self.path = Path('data/C0000004.dcm')  # temporary skip file dialogue during devel
+        path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
+        self.path = Path(path)
+        # self.path = Path('data/C0000004.dcm')  # temporary skip file dialogue during devel
         return self.path
 
 
@@ -123,8 +124,6 @@ class LeftPanel(ttk.Frame):
 
     def __init__(self, parent):
         super().__init__(parent)
-
-        options = {'fill': 'x', 'padx': 5, 'pady': 5}
 
         self.grid(row=1, column=0, rowspan=3, sticky=tk.NSEW)
 

@@ -77,6 +77,7 @@ class View(ttk.Frame):
                                              'scale_row',
                                              var_type=int)
             self.get_swe_frames()
+            utils.save_usr_input(self.swe_fhz, self.max_scale)
             self.canvas.focus_set()
         else:
             utils.warn_no_video()
@@ -209,6 +210,7 @@ class Controller:
         self.output.replot_data(self.data.results['raw'][self.data.source_var],
                                 self.data.source_var)
         self.output.results = self.data.results
+
         # TODO: continue function
         pass
 
@@ -224,7 +226,8 @@ class Output(ttk.Frame):  # TODO: move to other module
         self.columnconfigure(1, weight=3)
 
         self.results = None
-
+        # TODO: select row display plot
+        #       button or contextual menu for export?
         self.files_frame = ttk.LabelFrame(self, text='Analysed files')
         self.files_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.N)
         columns = ('file_name', 'path')
@@ -284,7 +287,7 @@ class Output(ttk.Frame):  # TODO: move to other module
 
         figure = Figure(figsize=(6, 4), dpi=100)
         figure_canvas = FigureCanvasTkAgg(figure, self.fig_frame)
-        NavigationToolbar2Tk(figure_canvas, self.fig_frame)
+        # NavigationToolbar2Tk(figure_canvas, self.fig_frame)
         axes = figure.add_subplot()
 
         vp = axes.violinplot(plot_data.tolist(), widths=1,
@@ -355,7 +358,6 @@ class App(tk.Tk):
         self.mb = MenuBar(self)
         self.config(menu=self.mb)
 
-        # create tab system
         self.nb = ttk.Notebook(self)
         self.nb.grid()
         self.load_file()

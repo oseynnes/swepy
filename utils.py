@@ -48,7 +48,7 @@ def fetch_recent_paths():
         return []
 
 
-def save_path(path):  # TODO: feed paths list to 'open recent' recent command of app menu
+def save_path(path):
     """Add file path to a list of recent file paths, in a JSON file"""
     dir_path = Path.cwd() / 'src'
     json_path = dir_path / 'temp.json'
@@ -80,6 +80,13 @@ def save_usr_input(fhz, scale):
         temp = load_json(json_path)
         temp['SWE_PARAM'] = [fhz, scale]
         save_json(temp, json_path)
+
+
+def save_results():
+    """Add Results dictionary to a JSON file"""
+    dir_path = Path.cwd() / 'src'
+    json_path = dir_path / 'temp.json'
+    # TODO: finish function
 
 
 def log_entry(name, string_var, ttk_table, row, var_type=float):
