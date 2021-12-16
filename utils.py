@@ -13,7 +13,7 @@ def warn_no_video():
 
 def warn_wrong_entry():
     showerror(title='Wrong input',
-              message='Please inform both the frequency and scale fields with a number')
+              message='Please inform the frequency and scale fields with a number')
 
 
 def set_win_geometry(container, width, height):
@@ -36,16 +36,29 @@ def save_json(content, path):
         json.dump(content, file)
 
 
-def fetch_recent_paths():
-    """fetch list of recent dicom file paths"""
+def load_settings(param):
+    """Load settings from previous analyses"""
     dir_path = Path.cwd() / 'src'
     json_path = dir_path / 'temp.json'
 
     if json_path.exists():
         temp = load_json(json_path)
-        return temp['RECENT_PATHS']
+        if param in temp:
+            return temp[param]
     else:
         return []
+
+
+# def load_previous():
+#     """fetch list of recent dicom file paths"""
+#     dir_path = Path.cwd() / 'src'
+#     json_path = dir_path / 'temp.json'
+#
+#     if json_path.exists():
+#         temp = load_json(json_path)
+#         return temp['RECENT_PATHS']
+#     else:
+#         return []
 
 
 def save_path(path):
@@ -91,19 +104,24 @@ def save_results():
 
 def log_entry(name, string_var, ttk_table, row, var_type=float):
     """Save entry from tkinter entry to ttk.TreeView instance"""
-    try:
-        var_type(string_var.get())
-    except ValueError:
+    if len(string_var.get()) == 0:
+        value = None
+    elif var_type(string_var.get()) >= 0:
+        value = var_type(string_var.get())
+        idx = 5 if isinstance(value, int) else 4  # with 4 pre-existing rows (0:3)
+    else:
+        print(f'{name}: {string_var.get()}, {type(string_var.get())}')
         warn_wrong_entry()
         return
-
-    if row in ttk_table.get_children():
-        ttk_table.delete(row)
-    ttk_table.insert(parent='',
-                     index=tk.END,
-                     iid=row,
-                     values=(name, var_type(string_var.get())))
-    return var_type(string_var.get())
+    if value:
+        if row in ttk_table.get_children():
+            ttk_table.delete(row)
+        ttk_table.insert(parent='',
+                         index=idx,
+                         iid=row,
+                         values=(name, value))
+    string_var.set('')
+    return value
 
 
 def closest_rgb(roi_rgb, color_profile_rgb):
@@ -121,8 +139,7 @@ def closest_rgb(roi_rgb, color_profile_rgb):
     elif len(roi_rgb.shape) == 4:
         roi_rgb = roi_rgb[:, :, :, np.newaxis, :]
     else:
-        print(f'roi_rgb shape: {roi_rgb.shape}')
-        raise ValueError('The ROI array must have 3 or 4 dimensions')
+        raise ValueError(f'ROI shape: {roi_rgb.shape}. Must have 3 or 4 dimensions')
     assert len(color_profile_rgb.shape) == 2, 'Color scale array must be two-dimensional (H, 3)'
     rgb_distances = np.sqrt(np.sum((roi_rgb - color_profile_rgb) ** 2, axis=-1))
     # indices of closest corresponding RGB value in color bar

@@ -20,7 +20,7 @@ class MenuBar(tk.Menu):
         self.file_menu.add_command(label='Open...', command=lambda: self.app.reset())
 
         recent_paths = tk.Menu(self.file_menu, tearoff=0)
-        paths_list = utils.fetch_recent_paths()
+        paths_list = utils.load_settings('RECENT_PATHS')
         for path in paths_list:
             recent_paths.add_command(label=path, command=lambda x=Path(path): self.app.reset(x))
         self.file_menu.add_cascade(label='Open recent', menu=recent_paths)
@@ -130,19 +130,22 @@ class LeftPanel(ttk.Frame):
         self.input_frame = ttk.LabelFrame(self, text='User input')
         self.input_frame.grid(row=0, column=0, sticky=tk.NSEW)
 
-        self.fhz_label = ttk.Label(self.input_frame, text='SWE fhz:')
-        self.fhz_label.grid(column=0, row=0, sticky=tk.W, padx=5)
-        # self.swe_fhz = None
+        fhz_label = ttk.Label(self.input_frame, text='SWE fhz:')
+        fhz_label.grid(column=0, row=0, sticky=tk.W, padx=5)
         self.usr_fhz = tk.StringVar()
         self.fhz_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_fhz)
         self.fhz_entry.grid(column=1, row=0, sticky=tk.E, padx=5)
 
-        self.scale_label = ttk.Label(self.input_frame, text='max. scale:')
-        self.scale_label.grid(column=0, row=1, sticky=tk.W, padx=5)
-        # self.max_scale = None
+        scale_label = ttk.Label(self.input_frame, text='max. scale:')
+        scale_label.grid(column=0, row=1, sticky=tk.W, padx=5)
         self.usr_scale = tk.StringVar()
         self.scale_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_scale)
         self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5)
+
+        self.usr_params = utils.load_settings('SWE_PARAM')
+        if self.usr_params:
+            self.usr_fhz.set(self.usr_params[0])
+            self.usr_scale.set(self.usr_params[1])
 
         self.enter_btn = ttk.Button(self.input_frame, text='OK', width=2)
         self.enter_btn.grid(column=1, row=3, sticky=tk.E, padx=5, pady=5)

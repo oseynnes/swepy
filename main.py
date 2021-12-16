@@ -66,6 +66,7 @@ class View(ttk.Frame):
             return
 
     def get_usr_entry(self):
+        """Log user entry, re-sample video and save to JSON file"""
         if self.ds:
             self.swe_fhz = utils.log_entry('SWE Fhz',
                                            self.left_panel.usr_fhz,
@@ -76,8 +77,9 @@ class View(ttk.Frame):
                                              self.left_panel.tv,
                                              'scale_row',
                                              var_type=int)
-            self.get_swe_frames()
-            utils.save_usr_input(self.swe_fhz, self.max_scale)
+            if isinstance(self.swe_fhz, (int, float)):
+                self.get_swe_frames()
+                utils.save_usr_input(self.swe_fhz, self.max_scale)
             self.canvas.focus_set()
         else:
             utils.warn_no_video()
@@ -124,6 +126,7 @@ class View(ttk.Frame):
             return
 
     def update_dcm_info(self):
+        """Populate table with info from dicom header and json file"""
         self.left_panel.values = (self.ds.NumberOfFrames,
                                   self.ds.Rows,
                                   self.ds.Columns,
@@ -131,6 +134,8 @@ class View(ttk.Frame):
         rows = (zip(self.left_panel.variables, self.left_panel.values))
         for row in rows:
             self.left_panel.tv.insert(parent='', index=tk.END, values=row)
+        # if self.left_panel.usr_params:
+        #     self.get_usr_entry()
 
     def activate_slider(self, n_frames):
         self.n_frame = n_frames
