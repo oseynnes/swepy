@@ -1,5 +1,6 @@
 import json
 import math
+import pickle
 import tkinter as tk
 from pathlib import Path
 from tkinter.messagebox import showinfo, showerror
@@ -36,6 +37,18 @@ def save_json(content, path):
         json.dump(content, file)
 
 
+def load_pickle(path):
+    """Return a content object from a pickle file"""
+    with open(path, 'rb') as handle:
+        return pickle.load(handle)
+
+
+def save_pickle(content, path):
+    """Pickle a content object"""
+    with open(path, 'wb') as handle:
+        pickle.dump(content, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 def load_settings(param):
     """Load settings from previous analyses"""
     dir_path = Path.cwd() / 'src'
@@ -47,18 +60,6 @@ def load_settings(param):
             return temp[param]
     else:
         return []
-
-
-# def load_previous():
-#     """fetch list of recent dicom file paths"""
-#     dir_path = Path.cwd() / 'src'
-#     json_path = dir_path / 'temp.json'
-#
-#     if json_path.exists():
-#         temp = load_json(json_path)
-#         return temp['RECENT_PATHS']
-#     else:
-#         return []
 
 
 def save_path(path):
@@ -95,11 +96,18 @@ def save_usr_input(fhz, scale):
         save_json(temp, json_path)
 
 
-def save_results():
-    """Add Results dictionary to a JSON file"""
+def pickle_results(file_path, data):
+    """Add analysis results to a JSON file
+    Args:
+        file_path (pathlib.PosixPath): path to analysed file
+        data (dict): analysis results
+    Returns: None
+    """
     dir_path = Path.cwd() / 'src'
-    json_path = dir_path / 'temp.json'
-    # TODO: finish function
+    pickle_path = dir_path / f'{file_path.name}.pickle'
+
+    temp = {str(file_path): data}
+    save_pickle(temp, pickle_path)
 
 
 def log_entry(name, string_var, ttk_table, row, var_type=float):
@@ -130,9 +138,7 @@ def closest_rgb(roi_rgb, color_profile_rgb):
     Args:
         roi_rgb: region of interest array
         color_profile_rgb: color scale array
-
     Returns: array of scale_height indices
-
     """
     if len(roi_rgb.shape) == 3:
         roi_rgb = roi_rgb[np.newaxis, :, :, np.newaxis, :]
@@ -155,9 +161,7 @@ def convert_shear_m(mu, to_unit, decimals=4, rho=1000):
         to_unit (str): variable to convert to. "velocity" or "youngs_m"
         decimals (int): number of decimals to round to
         rho (float): tissue density. Default: 1000 kg m-3 for skeletal muscle
-
     Returns: target conversion
-
     """
     assert (to_unit in {'velocity', 'youngs_m'}), \
         "'to_unit' can only be 'velocity' or 'youngs_m'"
@@ -173,9 +177,7 @@ def convert_youngs_m(epsilon, to_unit, decimals=4, rho=1000):
         to_unit (str): variable to convert to. "velocity" or "shear_m"
         decimals (int): number of decimals to round to
         rho (float): tissue density. Default: 1000 kg m-3 for skeletal muscle
-
     Returns: target conversion
-
     """
     assert (to_unit in {'velocity', 'shear_m'}), \
         "'to_unit' can only be 'velocity' or 'shear_m'"

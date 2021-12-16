@@ -94,20 +94,15 @@ class Data:
         # 1D array of values matching colour profile (velocity or modulus)
         self.real_values = np.linspace(self.max_scale, 0, self.colour_profile.shape[0])
 
-    def get_data_values(self, rois):
+    def analyse_roi(self, rois):
         """Calculate stat parameter of interest for ROIs of each frame"""
         self.get_colour_scale()
         indices = utils.closest_rgb(rois, self.colour_profile)
         self.mapped_values = self.real_values[indices]
+        self.gen_results()
 
-        self.create_output_df()
 
-        self.mean = self.mapped_values.mean()
-        self.median = np.median(self.mapped_values)
-        # print(f'Mean modulus matched RGBs (KPa):    {dict(zip(np.arange(indices.shape[0]), mean))}')
-        # print(f'Median modulus matched RGBs(KPa):   {dict(zip(np.arange(indices.shape[0]), median))}')
-
-    def create_output_df(self):
+    def gen_results(self):
         # TODO: implement method to detect variable measured in SWE scans (assume shear_m here)
         self.source_var = 'youngs_m'
         target_vars = ['velocity', 'shear_m', 'youngs_m']
@@ -124,6 +119,10 @@ class Data:
             d['stats']['_'.join((target_var, 'mean'))] = d['raw'][target_var].mean(axis=(1, 2))
 
         # data['ROI area'] = np.full((12,), utils.get_area(self.roi_coords))
+        self.mean = self.mapped_values.mean()
+        self.median = np.median(self.mapped_values)
+        # print(f'Mean modulus matched RGBs (KPa):    {dict(zip(np.arange(indices.shape[0]), mean))}')
+        # print(f'Median modulus matched RGBs(KPa):   {dict(zip(np.arange(indices.shape[0]), median))}')
         self.results = d
         self.df = pd.DataFrame.from_dict(d['stats'])
 

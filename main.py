@@ -134,8 +134,6 @@ class View(ttk.Frame):
         rows = (zip(self.left_panel.variables, self.left_panel.values))
         for row in rows:
             self.left_panel.tv.insert(parent='', index=tk.END, values=row)
-        # if self.left_panel.usr_params:
-        #     self.get_usr_entry()
 
     def activate_slider(self, n_frames):
         self.n_frame = n_frames
@@ -211,9 +209,10 @@ class Controller:
         self.data.swe_fhz = self.view.swe_fhz
         self.data.max_scale = self.view.max_scale
         self.data.roi_coords = self.view.img_panel.roi_coords
-        self.data.get_data_values(self.data.get_rois())
+        self.data.analyse_roi(self.data.get_rois())
         self.output.replot_data(self.data.results['raw'][self.data.source_var],
                                 self.data.source_var)
+        utils.pickle_results(self.data.path, self.data.results)
         self.output.results = self.data.results
 
         # TODO: continue function
@@ -282,7 +281,6 @@ class Output(ttk.Frame):  # TODO: move to other module
             D: data 3D array of shape (n frames, height, width).
         Returns: None
         """
-        # TODO: implement plot of other variables on the same canvas (ttk.Radiobutton?)
         for widget in self.fig_frame.winfo_children():
             widget.destroy()
         swe_vars = ['velocity', 'shear_m', 'youngs_m']
