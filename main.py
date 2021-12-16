@@ -1,4 +1,5 @@
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
 from PIL import ImageTk, Image
@@ -212,6 +213,7 @@ class Controller:
         self.data.analyse_roi(self.data.get_rois())
         self.output.replot_data(self.data.results['raw'][self.data.source_var],
                                 self.data.source_var)
+        self.output.add_to_file_list(self.data.path)
         utils.pickle_results(self.data.path, self.data.results)
         self.output.results = self.data.results
 
@@ -285,6 +287,8 @@ class Output(ttk.Frame):  # TODO: move to other module
             widget.destroy()
         swe_vars = ['velocity', 'shear_m', 'youngs_m']
         assert (swe_var in swe_vars), "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
+        self.label_var.set(swe_var)
+        self.change_variable()
         frame_dim = D.shape[0]
         plot_data = D.reshape(frame_dim, -1)
 
@@ -329,17 +333,22 @@ class Output(ttk.Frame):  # TODO: move to other module
         sb_x.grid(row=4, column=0, sticky='ew')
         sb_y.grid(row=0, column=1, sticky='ns')
 
-    def add_to_list(self, path):
+    def add_to_file_list(self, path):
+        """Add file name and path to list of analysed files"""
         self.files.append((path.name, path.resolve().parent))
         self.tv.insert('', tk.END, values=self.files[-1])
+        self.tv.focus(self.tv.get_children()[-1])
 
     def file_selected(self, event):
-        # TODO: implement method to display corresponding information in fig_frame
+        rows = []
         for selected_item in self.tv.selection():
             item = self.tv.item(selected_item)
-            record = item['values']
-            print(f"{', '.join(record)}")
-        pass
+            row = item['values']
+            rows.append(row)
+        if len(rows) == 1:
+            path = Path.cwd() / 'src' / f'{rows[0][0]}.pickle'
+            self.results = utils.load_pickle(path)
+            self.change_plot()
 
 
 class App(tk.Tk):
@@ -380,7 +389,7 @@ class App(tk.Tk):
         self.nb.forget(self.view)
         self.load_file()
         self.data.path = self.path
-        self.output.add_to_list(self.path)
+        # self.output.add_to_file_list(self.path)
         self.nb.insert(0, self.view, text='Image processing')
         self.nb.select(self.view)
         controller = Controller(self.data, self.view, self.output)

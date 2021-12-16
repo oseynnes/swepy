@@ -106,8 +106,9 @@ def pickle_results(file_path, data):
     dir_path = Path.cwd() / 'src'
     pickle_path = dir_path / f'{file_path.name}.pickle'
 
-    temp = {str(file_path): data}
-    save_pickle(temp, pickle_path)
+    # temp = {str(file_path): data}
+    # save_pickle(temp, pickle_path)
+    save_pickle(data, pickle_path)
 
 
 def log_entry(name, string_var, ttk_table, row, var_type=float):
@@ -118,7 +119,6 @@ def log_entry(name, string_var, ttk_table, row, var_type=float):
         value = var_type(string_var.get())
         idx = 5 if isinstance(value, int) else 4  # with 4 pre-existing rows (0:3)
     else:
-        print(f'{name}: {string_var.get()}, {type(string_var.get())}')
         warn_wrong_entry()
         return
     if value:
