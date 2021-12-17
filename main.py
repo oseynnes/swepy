@@ -346,7 +346,9 @@ class Output(ttk.Frame):  # TODO: move to other module
     def add_to_file_list(self, path):
         """Add file name and path to list of analysed files"""
         self.files.append((path.name, path.resolve().parent))
-        self.tv.insert('', tk.END, values=self.files[-1])
+        if path.name in self.tv.get_children():
+            self.tv.delete(path.name)
+        self.tv.insert('', tk.END, values=self.files[-1], iid=path.name)
         self.tv.focus(self.tv.get_children()[-1])
 
     def file_selected(self, event):

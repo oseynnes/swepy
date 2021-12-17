@@ -109,8 +109,16 @@ def pickle_results(file_path, data):
     save_pickle(data, pickle_path)
 
 
-def log_entry(name, string_var, ttk_table, row, var_type=float):
-    """Save entry from tkinter entry to ttk.TreeView instance"""
+def log_entry(name, string_var, ttk_table, row_id, var_type=float):
+    """Save entry from tkinter entry to ttk.TreeView instance
+    Args:
+        name (str):
+        string_var: variable to log in
+        ttk_table: ttk.TreeView instance
+        row_id (str): iid parameter of created row
+        var_type (type): desired type of variable to log in
+    Returns: variable inserted in ttk.TreeView instance
+    """
     if len(string_var.get()) == 0:
         value = None
     elif var_type(string_var.get()) >= 0:
@@ -120,11 +128,11 @@ def log_entry(name, string_var, ttk_table, row, var_type=float):
         warn_wrong_entry()
         return
     if value:
-        if row in ttk_table.get_children():
-            ttk_table.delete(row)
+        if row_id in ttk_table.get_children():
+            ttk_table.delete(row_id)
         ttk_table.insert(parent='',
                          index=idx,
-                         iid=row,
+                         iid=row_id,
                          values=(name, value))
     string_var.set('')
     return value
