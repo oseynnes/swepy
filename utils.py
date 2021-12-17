@@ -1,7 +1,5 @@
 import json
-import math
 import pickle
-import tkinter as tk
 from pathlib import Path
 from tkinter.messagebox import showinfo, showerror
 
@@ -104,7 +102,7 @@ def pickle_results(file_path, data):
     Returns: None
     """
     dir_path = Path.cwd() / 'src'
-    pickle_path = dir_path / f'{file_path.name}.pickle'
+    pickle_path = dir_path / f'{file_path.stem}.pickle'
 
     # temp = {str(file_path): data}
     # save_pickle(temp, pickle_path)
@@ -193,9 +191,7 @@ def convert_velocity(velocity, to_unit, decimals=4, rho=1000):
         to_unit (str): variable to convert to. "shear_m" or "youngs_m"
         decimals (int): number of decimals to round to
         rho (float): tissue density. Default: 1000 kg m-3 for skeletal muscle
-
     Returns: target conversion
-
     """
     assert (to_unit in {'shear_m', 'youngs_m'}), \
         "'to_unit' can only be 'shear_m' or 'youngs_m'"
@@ -212,9 +208,7 @@ def convert_swe(value, swe_var, to_unit, decimals=4, rho=1000):
         to_unit (str): variable to convert to. "velocity, "shear_m" or "youngs_m"
         decimals (int): number of decimals to round to
         rho (float): tissue density. Default: 1000 kg m-3 for skeletal muscle
-
     Returns: target conversion
-
     """
     swe_vars = ('velocity', 'shear_m', 'youngs_m')
     functions = (convert_velocity, convert_shear_m, convert_youngs_m)
@@ -228,9 +222,7 @@ def get_area(coords):
     """Calculate rectangular area
     Args:
         coords (dict): roi coordinates
-
     Returns: area in pixel
-
     """
     l1 = coords['x1'] - coords['x0']
     l2 = coords['y1'] - coords['y0']

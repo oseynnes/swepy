@@ -7,6 +7,7 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2Tk)
 from matplotlib.figure import Figure
 import numpy as np
+import pandas as pd
 import utils
 from processing import Data
 from ttk_frames import MenuBar, ImgPanel, TopPanel, LeftPanel, DisplayControls
@@ -231,9 +232,7 @@ class Output(ttk.Frame):  # TODO: move to other module
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
 
-        self.results = None
-        # TODO: select row display plot
-        #       button or contextual menu for export?
+        self.results = Non
         self.files_frame = ttk.LabelFrame(self, text='Analysed files')
         self.files_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.N)
         columns = ('file_name', 'path')
@@ -247,6 +246,17 @@ class Output(ttk.Frame):  # TODO: move to other module
         self.tv.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NSEW)
 
         self.add_scrollbars(self.files_frame)  # TODO: fix scroll bar
+
+        self.save_frame = ttk.LabelFrame(self.files_frame, text='Save to')
+        self.save_frame.grid(row=5, column=0, padx=5, pady=5, sticky=tk.EW)
+        self.csv_btn = ttk.Button(self.save_frame,
+                                  text='CSV',
+                                  command=lambda: self.export_to('csv'))
+        self.csv_btn.grid(column=0, row=0, sticky=tk.W, padx=5, pady=5)
+        self.xlsx_btn = ttk.Button(self.save_frame,
+                                  text='Excel',
+                                  command=lambda: self.export_to('xlsx'))
+        self.xlsx_btn.grid(column=1, row=0, sticky=tk.E, padx=5, pady=5)
 
         self.fig_frame = ttk.LabelFrame(self, text='Output')
         self.fig_frame.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
@@ -346,9 +356,25 @@ class Output(ttk.Frame):  # TODO: move to other module
             row = item['values']
             rows.append(row)
         if len(rows) == 1:
+            name = rows[0][0].split('.')[0]
             path = Path.cwd() / 'src' / f'{rows[0][0]}.pickle'
             self.results = utils.load_pickle(path)
             self.change_plot()
+
+    def export_to(self, format):
+        """Export stats for each unique SWE frame
+        Args:
+            format  (str): extension of exported file (currently csv and xlsx)
+        Returns: None
+        """
+        dir_path = self.results['file'][0]
+        name = self.results['file'][1]
+        path = dir_path / f'{name}.{format}'
+        dfs = pd.DataFrame.from_dict(self.results['stats'])
+        if format == 'csv':
+            dfs.to_csv(path, index_label='frame')
+        if format == 'xlsx':
+            dfs.to_excel(path, index_label='frame')
 
 
 class App(tk.Tk):

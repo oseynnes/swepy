@@ -101,12 +101,11 @@ class Data:
         self.mapped_values = self.real_values[indices]
         self.gen_results()
 
-
     def gen_results(self):
         # TODO: implement method to detect variable measured in SWE scans (assume shear_m here)
         self.source_var = 'youngs_m'
         target_vars = ['velocity', 'shear_m', 'youngs_m']
-        d = {'raw': {}, 'stats': {}}
+        d = {'file': [self.path.parent, self.path.stem], 'raw': {}, 'stats': {}}
         for target_var in target_vars:
             if target_var == self.source_var:
                 d['raw'][target_var] = self.mapped_values
@@ -117,12 +116,10 @@ class Data:
 
             d['stats']['_'.join((target_var, 'median'))] = np.median(d['raw'][target_var], axis=(1, 2))
             d['stats']['_'.join((target_var, 'mean'))] = d['raw'][target_var].mean(axis=(1, 2))
-
-        # data['ROI area'] = np.full((12,), utils.get_area(self.roi_coords))
+        self.results = d
         self.mean = self.mapped_values.mean()
         self.median = np.median(self.mapped_values)
-        # print(f'Mean modulus matched RGBs (KPa):    {dict(zip(np.arange(indices.shape[0]), mean))}')
-        # print(f'Median modulus matched RGBs(KPa):   {dict(zip(np.arange(indices.shape[0]), median))}')
-        self.results = d
-        self.df = pd.DataFrame.from_dict(d['stats'])
+        # data['ROI area'] = np.full((12,), utils.get_area(self.roi_coords))
+
+
 
