@@ -218,9 +218,6 @@ class Controller:
         utils.pickle_results(self.data.path, self.data.results)
         self.output.results = self.data.results
 
-        # TODO: continue function
-        pass
-
 
 class Output(ttk.Frame):  # TODO: move to other module
     """Tab frame displaying analysis output"""
@@ -231,7 +228,6 @@ class Output(ttk.Frame):  # TODO: move to other module
         self.grid(row=0, column=0, columnspan=2, rowspan=5, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
-
         self.results = None
         self.files_frame = ttk.LabelFrame(self, text='Analysed files')
         self.files_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.N)
@@ -254,8 +250,8 @@ class Output(ttk.Frame):  # TODO: move to other module
                                   command=lambda: self.export_to('csv'))
         self.csv_btn.grid(column=0, row=0, sticky=tk.W, padx=5, pady=5)
         self.xlsx_btn = ttk.Button(self.save_frame,
-                                  text='Excel',
-                                  command=lambda: self.export_to('xlsx'))
+                                   text='Excel',
+                                   command=lambda: self.export_to('xlsx'))
         self.xlsx_btn.grid(column=1, row=0, sticky=tk.E, padx=5, pady=5)
 
         self.fig_frame = ttk.LabelFrame(self, text='Output')
@@ -369,6 +365,8 @@ class Output(ttk.Frame):  # TODO: move to other module
             format  (str): extension of exported file (currently csv and xlsx)
         Returns: None
         """
+        if not self.results:
+            return
         dir_path = self.results['file'][0]
         name = self.results['file'][1]
         path = dir_path / f'{name}.{format}'
@@ -377,6 +375,13 @@ class Output(ttk.Frame):  # TODO: move to other module
             dfs.to_csv(path, index_label='frame')
         if format == 'xlsx':
             dfs.to_excel(path, index_label='frame')
+
+    def clear_output(self):
+        # TODO: connect clear output to menu command
+        # clear treeview
+        # clear figure
+        # delete output files
+        pass
 
 
 class App(tk.Tk):

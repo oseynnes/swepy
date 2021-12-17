@@ -26,9 +26,12 @@ class MenuBar(tk.Menu):
         self.file_menu.add_cascade(label='Open recent', menu=recent_paths)
 
         self.file_menu.add_separator()
-        self.file_menu.add_command(label='Export')  # TODO: Export results command
+        self.file_menu.add_command(label='Export to CSV',
+                                   command=lambda: self.app.output.export_to('csv'))
+        self.file_menu.add_command(label='Export to Excel',
+                                   command=lambda: self.app.output.export_to('xlsx'))
         self.file_menu.add_separator()
-        self.file_menu.add_command(label='Clear all results')  # TODO: Export results command
+        self.file_menu.add_command(label='Clear all results')  # TODO: Clear results command
         self.file_menu.add_command(label='Quit', command=quit)
 
         self.help_menu = tk.Menu(self, tearoff=0)
