@@ -232,7 +232,7 @@ class Output(ttk.Frame):  # TODO: move to other module
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
 
-        self.results = Non
+        self.results = None
         self.files_frame = ttk.LabelFrame(self, text='Analysed files')
         self.files_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.N)
         columns = ('file_name', 'path')
