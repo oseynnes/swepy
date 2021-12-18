@@ -3,16 +3,12 @@ from pathlib import Path
 from tkinter import ttk
 
 from PIL import ImageTk, Image
-from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
-                                               NavigationToolbar2Tk)
-from matplotlib.figure import Figure
-import numpy as np
-import pandas as pd
+
 import utils
+from output_frames import FilesFrame, SaveFrame, FigFrame
 from processing import Data
 from root_frames import MenuBar
 from view_frames import ImgPanel, TopPanel, LeftPanel, DisplayControls
-from output_frames import FilesFrame, SaveFrame, FigFrame
 
 
 class View(ttk.Frame):

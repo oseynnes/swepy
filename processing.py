@@ -1,8 +1,7 @@
 import numpy as np
 from pydicom import dcmread
 from pydicom.pixel_data_handlers.util import convert_color_space
-import numpy as np
-import pandas as pd
+
 import utils
 
 
@@ -71,9 +70,9 @@ class Data:
     def get_rois(self):
         """Index sub-array of unique SWE frames at SWE ROI coordinates"""
         self.rois = self.swe_array[:,
-                                   self.roi_coords['y0']:self.roi_coords['y1'],
-                                   self.roi_coords['x0']:self.roi_coords['x1'],
-                                   :]
+                    self.roi_coords['y0']:self.roi_coords['y1'],
+                    self.roi_coords['x0']:self.roi_coords['x1'],
+                    :]
         return self.rois
 
     def remove_voids(self):  # TODO: filter function
@@ -120,6 +119,3 @@ class Data:
         self.mean = self.mapped_values.mean()
         self.median = np.median(self.mapped_values)
         # data['ROI area'] = np.full((12,), utils.get_area(self.roi_coords))
-
-
-

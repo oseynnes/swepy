@@ -1,11 +1,11 @@
 import tkinter as tk
 from tkinter import ttk
+
+import numpy as np
+import pandas as pd
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2Tk)
 from matplotlib.figure import Figure
-import numpy as np
-import pandas as pd
-import utils
 
 
 class FilesFrame(ttk.LabelFrame):
