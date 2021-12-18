@@ -129,3 +129,6 @@ dmypy.json
 .pyre/
 test.py
 /src/paths.json
+/src/
+
+.gitignore

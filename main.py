@@ -10,7 +10,9 @@ import numpy as np
 import pandas as pd
 import utils
 from processing import Data
-from ttk_frames import MenuBar, ImgPanel, TopPanel, LeftPanel, DisplayControls
+from root_frames import MenuBar
+from view_frames import ImgPanel, TopPanel, LeftPanel, DisplayControls
+from output_frames import FilesFrame, SaveFrame, FigFrame
 
 
 class View(ttk.Frame):
@@ -188,9 +190,6 @@ class Controller:
         self.view = view
         self.output = output
 
-    def save_roi_coords(self, coords):
-        self.data.roi_coords = coords
-
     def get_dicom_data(self):
         # TODO: link to a ttk.Progressbar widget (dicom loading is a few seconds)
         self.data.load_dicom()
@@ -212,11 +211,11 @@ class Controller:
         self.data.max_scale = self.view.max_scale
         self.data.roi_coords = self.view.img_panel.roi_coords
         self.data.analyse_roi(self.data.get_rois())
-        self.output.replot_data(self.data.results['raw'][self.data.source_var],
-                                self.data.source_var)
+        self.output.fig_frame.results = self.data.results
+        self.output.fig_frame.replot_data(self.data.results['raw'][self.data.source_var],
+                                          self.data.source_var)
         self.output.add_to_file_list(self.data.path)
         utils.pickle_results(self.data.path, self.data.results)
-        self.output.results = self.data.results
 
 
 class Output(ttk.Frame):  # TODO: move to other module
@@ -228,153 +227,49 @@ class Output(ttk.Frame):  # TODO: move to other module
         self.grid(row=0, column=0, columnspan=2, rowspan=5, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
+
         self.results = None
-        self.files_frame = ttk.LabelFrame(self, text='Analysed files')
-        self.files_frame.grid(row=0, column=0, rowspan=4, padx=5, pady=5, sticky=tk.N)
-        columns = ('file_name', 'path')
-        self.tv = ttk.Treeview(self.files_frame, columns=columns, show='headings')
-        self.tv.heading('file_name', text='File')
-        self.tv.column('file_name', width=100)
-        self.tv.heading('path', text='Path')
-        self.tv.column('path', width=200)
+
+        self.files_frame = FilesFrame(self)
         self.files = []
-        self.tv.bind('<<TreeviewSelect>>', self.file_selected)
-        self.tv.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NSEW)
+        self.files_frame.tv.bind('<<TreeviewSelect>>', self.file_selected)
 
         self.add_scrollbars(self.files_frame)  # TODO: fix scroll bar
 
-        self.save_frame = ttk.LabelFrame(self.files_frame, text='Save to')
-        self.save_frame.grid(row=5, column=0, padx=5, pady=5, sticky=tk.EW)
-        self.csv_btn = ttk.Button(self.save_frame,
-                                  text='CSV',
-                                  command=lambda: self.export_to('csv'))
-        self.csv_btn.grid(column=0, row=0, sticky=tk.W, padx=5, pady=5)
-        self.xlsx_btn = ttk.Button(self.save_frame,
-                                   text='Excel',
-                                   command=lambda: self.export_to('xlsx'))
-        self.xlsx_btn.grid(column=1, row=0, sticky=tk.E, padx=5, pady=5)
+        self.save_frame = SaveFrame(self)
+        self.save_frame.csv_btn['command'] = \
+            lambda: self.save_frame.export_to(self.results, 'csv')
+        self.save_frame.xlsx_btn['command'] = \
+            lambda: self.save_frame.export_to(self.results, 'xlsx')
 
-        self.fig_frame = ttk.LabelFrame(self, text='Output')
-        self.fig_frame.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
-
-        self.lf = ttk.LabelFrame(self, text='Variable')
-        self.lf.grid(row=5, column=1, padx=5, pady=5)
-        self.label_var = tk.StringVar()
-        self.y_labels = {'velocity': 'Wave velocity (m/s)',
-                         'shear_m': 'Shear modulus (KPa)',
-                         'youngs_m': "Young's modulus (KPa"}
-        grid_column = 0
-        for key, label in self.y_labels.items():
-            radio = ttk.Radiobutton(self.lf,
-                                    text=label,
-                                    value=key,
-                                    command=self.change_plot,
-                                    variable=self.label_var)
-            radio.grid(column=grid_column, row=0, ipadx=10, ipady=10)
-            grid_column += 1
-
-    def change_variable(self):
-        self.var = self.label_var.get()
-
-    def change_plot(self):
-        if self.results is None:
-            return
-        self.change_variable()
-        D = self.results['raw'][self.var]
-        self.replot_data(D, self.var)
-
-    def replot_data(self, D, swe_var):
-        """Reset widgets to plot new data
-        Args:
-            D: data 3D array of shape (n frames, height, width).
-        Returns: None
-        """
-        for widget in self.fig_frame.winfo_children():
-            widget.destroy()
-        swe_vars = ['velocity', 'shear_m', 'youngs_m']
-        assert (swe_var in swe_vars), "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
-        self.label_var.set(swe_var)
-        self.change_variable()
-        frame_dim = D.shape[0]
-        plot_data = D.reshape(frame_dim, -1)
-
-        figure = Figure(figsize=(6, 4), dpi=100)
-        figure_canvas = FigureCanvasTkAgg(figure, self.fig_frame)
-        # NavigationToolbar2Tk(figure_canvas, self.fig_frame)
-        axes = figure.add_subplot()
-
-        vp = axes.violinplot(plot_data.tolist(), widths=1,
-                             showmeans=True, showmedians=True, showextrema=False)
-
-        for body in vp['bodies']:
-            body.set_facecolor('#D43F3A')
-            body.set_alpha(1)
-            body.set_edgecolor('#473535')
-
-        vp['cmeans'].set_color('#473535')
-        vp['cmedians'].set_color('white')
-
-        std = np.std(D, axis=(1, 2))
-        xy = [[l.vertices[:, 0].mean(), l.vertices[0, 1]] for l in vp['cmeans'].get_paths()]
-        xy = np.array(xy)
-        axes.vlines(xy[:, 0],
-                    ymin=xy[:, 1] - std,
-                    ymax=xy[:, 1] + std,
-                    color='#473535',
-                    lw=3,
-                    zorder=1)
-
-        axes.set_xlabel('SWE frames')
-        axes.set_ylabel(self.y_labels[swe_var])
-        axes.set_title(f'Median: {int(np.median(D))}, '
-                       f'Mean: {int(D.mean())}, '
-                       f'STD: {int(np.std(D))}')
-
-        figure_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        self.fig_frame = FigFrame(self)
 
     def add_scrollbars(self, container):
-        sb_x = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.tv.xview)
-        sb_y = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.tv.yview)
-        self.tv.configure(xscrollcommand=sb_x.set, yscrollcommand=sb_y.set)
+        sb_x = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.files_frame.tv.xview)
+        sb_y = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.files_frame.tv.yview)
+        self.files_frame.tv.configure(xscrollcommand=sb_x.set, yscrollcommand=sb_y.set)
         sb_x.grid(row=4, column=0, sticky='ew')
         sb_y.grid(row=0, column=1, sticky='ns')
 
     def add_to_file_list(self, path):
         """Add file name and path to list of analysed files"""
         self.files.append((path.name, path.resolve().parent))
-        if path.name in self.tv.get_children():
-            self.tv.delete(path.name)
-        self.tv.insert('', tk.END, values=self.files[-1], iid=path.name)
-        self.tv.focus(self.tv.get_children()[-1])
+        if path.name in self.files_frame.tv.get_children():
+            self.files_frame.tv.delete(path.name)
+        self.files_frame.tv.insert('', tk.END, values=self.files[-1], iid=path.name)
+        self.files_frame.tv.focus(self.files_frame.tv.get_children()[-1])
 
     def file_selected(self, event):
         rows = []
-        for selected_item in self.tv.selection():
-            item = self.tv.item(selected_item)
+        for selected_item in self.files_frame.tv.selection():
+            item = self.files_frame.tv.item(selected_item)
             row = item['values']
             rows.append(row)
         if len(rows) == 1:
             name = rows[0][0].split('.')[0]
-            path = Path.cwd() / 'src' / f'{rows[0][0]}.pickle'
-            self.results = utils.load_pickle(path)
-            self.change_plot()
-
-    def export_to(self, format):
-        """Export stats for each unique SWE frame
-        Args:
-            format  (str): extension of exported file (currently csv and xlsx)
-        Returns: None
-        """
-        if not self.results:
-            return
-        dir_path = self.results['file'][0]
-        name = self.results['file'][1]
-        path = dir_path / f'{name}.{format}'
-        dfs = pd.DataFrame.from_dict(self.results['stats'])
-        if format == 'csv':
-            dfs.to_csv(path, index_label='frame')
-        if format == 'xlsx':
-            dfs.to_excel(path, index_label='frame')
+            path = Path.cwd() / 'src' / f'{name}.pickle'
+            self.fig_frame.results = utils.load_pickle(path)
+            self.fig_frame.change_plot()
 
     def clear_output(self):
         # TODO: connect clear output to menu command
