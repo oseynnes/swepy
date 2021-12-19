@@ -32,6 +32,8 @@ class SaveFrame(ttk.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
 
+        self.output = parent
+
         self.config(text='Save to')
         self.grid(row=5, column=0, padx=5, pady=5, sticky=tk.EW)
 
@@ -42,20 +44,20 @@ class SaveFrame(ttk.LabelFrame):
                                    text='Excel')
         self.xlsx_btn.grid(column=1, row=0, sticky=tk.E, padx=5, pady=5)
 
-    @staticmethod
-    def export_to(results, format):
+    def export_to(self, format):
         """Export stats for each unique SWE frame
         Args:
             results (dict):
             format (str): extension of exported file (currently csv and xlsx)
         Returns: None
         """
-        if not results:
+        print(f'self.results missing in export_to: {self.output.results is None}')
+        if not self.output.results:
             return
-        dir_path = results['file'][0]
-        name = results['file'][1]
+        dir_path = self.output.results['file'][0]
+        name = self.output.results['file'][1]
         path = dir_path / f'{name}.{format}'
-        dfs = pd.DataFrame.from_dict(results['stats'])
+        dfs = pd.DataFrame.from_dict(self.output.results['stats'])
         if format == 'csv':
             dfs.to_csv(path, index_label='frame')
         if format == 'xlsx':
@@ -68,9 +70,9 @@ class FigFrame(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
+        self.output = parent
 
-        self.results = None
+        self.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
 
         self.lf0 = ttk.LabelFrame(self, text='Preview')
         self.lf0.grid(row=0, column=1, rowspan=3, padx=5, pady=5, sticky=tk.NSEW)
@@ -95,10 +97,10 @@ class FigFrame(ttk.Frame):
         self.var = self.label_var.get()
 
     def change_plot(self):
-        if self.results is None:
+        if self.output.results is None:
             return
         self.change_variable()
-        D = self.results['raw'][self.var]
+        D = self.output.results['raw'][self.var]
         self.replot_data(D, self.var)
 
     def replot_data(self, D, swe_var):
@@ -144,7 +146,7 @@ class FigFrame(ttk.Frame):
 
         axes.set_xlabel('SWE frames')
         axes.set_ylabel(self.y_labels[swe_var])
-        axes.set_title(f"{self.results['file'][1]}, "
+        axes.set_title(f"{self.output.results['file'][1]}, "
                        f"Median: {int(np.median(D))}, "
                        f"Mean: {int(D.mean())}, "
                        f"STD: {int(np.std(D))}")

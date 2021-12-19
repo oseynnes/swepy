@@ -17,7 +17,6 @@ class View(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        # self.grid(row=0, column=0, rowspan=4, sticky=tk.NSEW)
         self.grid(row=0, column=0, rowspan=4, columnspan=2, sticky=tk.NSEW)
         self.columnconfigure(1, weight=4)
         self.rowconfigure(1, weight=4)
@@ -44,7 +43,6 @@ class View(ttk.Frame):
         self.left_panel = LeftPanel(self)
         self.swe_fhz = None
         self.max_scale = None
-        # self.left_panel.fhz_entry.bind('<Return>', self.get_usr_entry)
         self.left_panel.enter_btn['command'] = self.get_usr_entry
         self.left_panel.reset_roi_btn['command'] = self.reset_rois
         self.left_panel.analyse_btn['command'] = self.analyse
@@ -210,7 +208,7 @@ class Controller:
         self.data.max_scale = self.view.max_scale
         self.data.roi_coords = self.view.img_panel.roi_coords
         self.data.analyse_roi(self.data.get_rois())
-        self.output.fig_frame.results = self.data.results
+        self.output.results = self.data.results
         self.output.fig_frame.replot_data(self.data.results['raw'][self.data.source_var],
                                           self.data.source_var)
         self.output.add_to_file_list(self.data.path)
@@ -236,10 +234,8 @@ class Output(ttk.Frame):  # TODO: move to other module
         self.add_scrollbars(self.files_frame)  # TODO: fix scroll bar
 
         self.save_frame = SaveFrame(self)
-        self.save_frame.csv_btn['command'] = \
-            lambda: self.save_frame.export_to(self.results, 'csv')
-        self.save_frame.xlsx_btn['command'] = \
-            lambda: self.save_frame.export_to(self.results, 'xlsx')
+        self.save_frame.csv_btn['command'] = lambda: self.save_frame.export_to('csv')
+        self.save_frame.xlsx_btn['command'] = lambda: self.save_frame.export_to('xlsx')
 
         self.fig_frame = FigFrame(self)
 
@@ -317,7 +313,6 @@ class App(tk.Tk):
         self.nb.forget(self.view)
         self.load_file()
         self.data.path = self.path
-        # self.output.add_to_file_list(self.path)
         self.nb.insert(0, self.view, text='Image processing')
         self.nb.select(self.view)
         controller = Controller(self.data, self.view, self.output)
@@ -330,4 +325,3 @@ if __name__ == '__main__':
     app.mainloop()
 
     # TODO: - add doctrings to functions
-    #       - fix window and widgets resize

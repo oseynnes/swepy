@@ -26,9 +26,9 @@ class MenuBar(tk.Menu):
 
         self.file_menu.add_separator()
         self.file_menu.add_command(label='Export to CSV',
-                                   command=lambda: self.app.output.export_to('csv'))
+                                   command=lambda: self.app.output.save_frame.export_to('csv'))
         self.file_menu.add_command(label='Export to Excel',
-                                   command=lambda: self.app.output.export_to('xlsx'))
+                                   command=lambda: self.app.output.save_frame.export_to('xlsx'))
         self.file_menu.add_separator()
         self.file_menu.add_command(label='Clear all results')  # TODO: Clear results command
         self.file_menu.add_command(label='Quit', command=quit)
