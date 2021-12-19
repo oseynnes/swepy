@@ -17,7 +17,10 @@ class View(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.grid(row=0, column=0, rowspan=4, sticky=tk.NSEW)
+        # self.grid(row=0, column=0, rowspan=4, sticky=tk.NSEW)
+        self.grid(row=0, column=0, rowspan=4, columnspan=2, sticky=tk.NSEW)
+        self.columnconfigure(1, weight=4)
+        self.rowconfigure(1, weight=4)
 
         self.ds = None
         self.img_array = None
@@ -285,9 +288,9 @@ class App(tk.Tk):
         window_width = 950
         window_height = 690
         utils.set_win_geometry(self, window_width, window_height)
-        self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
-        self.resizable(False, False)  # prevent resizing for now
+        self.rowconfigure(0, weight=1)  # NB: image only resize up to its size
+
 
         self.path = None
 
@@ -295,7 +298,9 @@ class App(tk.Tk):
         self.config(menu=self.mb)
 
         self.nb = ttk.Notebook(self)
-        self.nb.grid()
+        self.nb.grid(row=0, column=0, rowspan=4, columnspan=2, sticky=tk.NSEW)
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=4)
         self.load_file()
         self.output = Output(self.nb)
         self.nb.add(self.view, text='Image processing')

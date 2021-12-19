@@ -17,8 +17,12 @@ class ImgPanel(ttk.Frame):
         self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
         self.canvas.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
         self.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
-        self.fov_coords = {'x0': 0, 'y0': 0,
-                           'x1': int(self.canvas['width']), 'y1': int(self.canvas['height']) / 2}
+        self.columnconfigure(1, weight=4)
+        self.rowconfigure(1, weight=4)
+        self.fov_coords = {'x0': 0,
+                           'y0': 0,
+                           'x1': int(self.canvas['width']),
+                           'y1': int(self.canvas['height']) / 2}
 
     def activate_draw(self):
         self.canvas.bind('<Button-1>', self.on_button_press)
@@ -74,6 +78,8 @@ class TopPanel(ttk.Frame):
         options = {'fill': 'x', 'padx': 5, 'pady': 5}
 
         self.grid(row=0, column=1, sticky=tk.EW)
+        self.columnconfigure(1, weight=4)
+        self.rowconfigure(0, weight=1)
 
         self.img_name = ttk.Label(self, anchor=tk.CENTER, text='')
         self.img_name.pack(**options)
