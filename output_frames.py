@@ -62,25 +62,28 @@ class SaveFrame(ttk.LabelFrame):
             dfs.to_excel(path, index_label='frame')
 
 
-class FigFrame(ttk.LabelFrame):
+class FigFrame(ttk.Frame):
     """Panel of GUI holding commands to save data"""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.config(text='Output')
-        self.grid(row=0, column=1, rowspan=5, padx=5, pady=5, sticky=tk.NSEW)
+
+        self.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
 
         self.results = None
 
-        self.lf = ttk.LabelFrame(self, text='Variable')
-        self.lf.grid(row=5, column=1, padx=5, pady=5)
+        self.lf0 = ttk.LabelFrame(self, text='Preview')
+        self.lf0.grid(row=0, column=1, rowspan=3, padx=5, pady=5, sticky=tk.NSEW)
+
+        self.lf1 = ttk.LabelFrame(self, text='Variable')
+        self.lf1.grid(row=4, column=1, padx=5, pady=5, sticky=tk.NSEW)
         self.label_var = tk.StringVar()
         self.y_labels = {'velocity': 'Wave velocity (m/s)',
                          'shear_m': 'Shear modulus (KPa)',
                          'youngs_m': "Young's modulus (KPa"}
         grid_column = 0
         for key, label in self.y_labels.items():
-            radio = ttk.Radiobutton(self.lf,
+            radio = ttk.Radiobutton(self.lf1,
                                     text=label,
                                     value=key,
                                     command=self.change_plot,
@@ -104,7 +107,7 @@ class FigFrame(ttk.LabelFrame):
             D: data 3D array of shape (n frames, height, width).
         Returns: None
         """
-        for widget in self.winfo_children():
+        for widget in self.lf0.winfo_children():
             widget.destroy()
         swe_vars = ['velocity', 'shear_m', 'youngs_m']
         assert (swe_var in swe_vars), "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
@@ -114,8 +117,8 @@ class FigFrame(ttk.LabelFrame):
         plot_data = D.reshape(frame_dim, -1)
 
         figure = Figure(figsize=(6, 4), dpi=100)
-        figure_canvas = FigureCanvasTkAgg(figure, self)
-        NavigationToolbar2Tk(figure_canvas, self)
+        figure_canvas = FigureCanvasTkAgg(figure, self.lf0)
+        NavigationToolbar2Tk(figure_canvas, self.lf0)
         axes = figure.add_subplot()
 
         vp = axes.violinplot(plot_data.tolist(), widths=1,

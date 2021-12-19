@@ -291,7 +291,6 @@ class App(tk.Tk):
         self.columnconfigure(1, weight=4)
         self.rowconfigure(0, weight=1)  # NB: image only resize up to its size
 
-
         self.path = None
 
         self.mb = MenuBar(self)

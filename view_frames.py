@@ -78,8 +78,6 @@ class TopPanel(ttk.Frame):
         options = {'fill': 'x', 'padx': 5, 'pady': 5}
 
         self.grid(row=0, column=1, sticky=tk.EW)
-        self.columnconfigure(1, weight=4)
-        self.rowconfigure(0, weight=1)
 
         self.img_name = ttk.Label(self, anchor=tk.CENTER, text='')
         self.img_name.pack(**options)
