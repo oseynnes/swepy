@@ -39,9 +39,12 @@ class MenuBar(tk.Menu):
 
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
-        # TODO: add possibility to load initial dir from temp file
-        initialdir = self.path.parent if self.path else '/'
+        temp_path = Path.cwd() / 'src' / 'temp.json'
+        if temp_path.exists():
+            temp = utils.load_json(temp_path)
+            initialdir = Path(temp['RECENT_PATHS'][0]).parent
+        else:
+            initialdir = '/'
         path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
         self.path = Path(path)
-        # self.path = Path('data/C0000004.dcm')  # temporary skip file dialogue during devel
         return self.path
