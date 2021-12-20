@@ -2,17 +2,15 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-from PIL import ImageTk, Image
-
 import utils
 from output_frames import FilesFrame, SaveFrame, FigFrame
 from processing import Data
 from root_frames import MenuBar
-from view_frames import ImgPanel, TopPanel, LeftPanel, DisplayControls
+from view_frames import ImgPanel, TopPanel, LeftPanel
 
 
 class View(ttk.Frame):
-    """Accessing tkinter frames composing the GUI"""
+    """Tab frame displaying and controlling scan display and analysis"""
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -23,9 +21,6 @@ class View(ttk.Frame):
 
         self.ds = None
         self.img_array = None
-        self.swe_array = None
-        self.current_array = None
-        self.img = None
         self.img_name = None
 
         self.controller = None
@@ -34,9 +29,6 @@ class View(ttk.Frame):
         self.canvas = self.img_panel.canvas
         self.fov_coords = None
         self.init_roi_coords = None
-        self.roi_coords = self.img_panel.roi_coords
-        self.n_frame = 0
-        self.current_frame = 0
 
         self.top = TopPanel(self)
 
@@ -46,11 +38,6 @@ class View(ttk.Frame):
         self.left_panel.enter_btn['command'] = self.get_usr_entry
         self.left_panel.reset_roi_btn['command'] = self.reset_rois
         self.left_panel.analyse_btn['command'] = self.analyse
-
-        self.controls = DisplayControls(self)
-        self.controls.slider['command'] = self.update_slider
-        self.controls.play_btn['command'] = self.toggle_play_pause
-        self.frame_label_var = tk.StringVar()
 
     def set_controller(self, controller):
         self.controller = controller
@@ -87,44 +74,12 @@ class View(ttk.Frame):
             return
 
     def get_swe_frames(self):
-        self.swe_array = self.controller.get_swe_array(self.swe_fhz)
-        self.current_array = self.swe_array
-        self.controls.current_value.set(0)
-        self.activate_slider(self.swe_array.shape[0])
-        self.current_frame = 0
-        self.update_frame()
-
-    def update_slider(self, event):
-        if int(self.controls.current_value.get()) < self.n_frame:
-            self.current_frame = int(self.controls.current_value.get())
-            self.controls.frame_label.config(text=f'{self.current_frame + 1}/{self.n_frame}')
-            self.update_frame()
-            self.canvas.focus_set()
-
-    def toggle_play_pause(self):
-        if self.controls.pause:
-            self.controls.pause = False
-            self.controls.play_btn.config(text='Play')
-            self.after_cancel(self.after_id)
-            self.canvas.focus_set()
-        else:
-            self.controls.pause = True
-            self.controls.play_btn.config(text='Pause')
-            self.play_video()
-
-    def play_video(self):
-        if self.ds:
-            self.update_frame()
-            self.current_frame += 1
-            if self.current_frame < self.n_frame:
-                self.after_id = self.after(50, self.play_video)  # 50ms
-            else:
-                self.controls.pause = False
-                self.controls.play_btn.config(text='Play')
-                self.current_frame = 0
-        else:
-            utils.warn_no_video()
-            return
+        self.img_panel.swe_array = self.controller.get_swe_array(self.swe_fhz)
+        self.img_panel.current_array = self.img_panel.swe_array
+        self.img_panel.ctrl.current_value.set(0)
+        self.img_panel.activate_slider(self.img_panel.swe_array.shape[0])
+        self.img_panel.ctrl.current_frame = 0
+        self.img_panel.ctrl.update_frame()
 
     def update_dcm_info(self):
         """Populate table with info from dicom header and json file"""
@@ -136,43 +91,20 @@ class View(ttk.Frame):
         for row in rows:
             self.left_panel.tv.insert(parent='', index=tk.END, values=row)
 
-    def activate_slider(self, n_frames):
-        self.n_frame = n_frames
-        self.controls.frame_label.config(text=f'{self.current_frame + 1}/{n_frames}')
-        self.controls.slider.config(to=self.n_frame)
-        self.controls.slider.config(state='normal')  # activate slider
-
     def activate_arrowkeys(self):
         self.canvas.focus_set()
-        self.canvas.bind('<Left>', self.left_key)
-        self.canvas.bind('<Right>', self.right_key)
-
-    def left_key(self, event):
-        if int(self.controls.current_value.get()) > 0:
-            self.current_frame -= 1
-            self.update_frame()
-
-    def right_key(self, event):
-        if int(self.controls.current_value.get()) < self.n_frame - 1:
-            self.current_frame += 1
-            self.update_frame()
+        self.canvas.bind('<Left>', self.img_panel.ctrl.left_key)
+        self.canvas.bind('<Right>', self.img_panel.ctrl.right_key)
 
     def set_img_name(self):
         self.top.img_name.config(text=self.img_name)
 
-    def update_frame(self):
-        self.controls.current_value.set(self.current_frame)
-        self.controls.frame_label.config(text=f'{self.current_frame + 1}/{self.n_frame}')
-        self.img = ImageTk.PhotoImage(image=Image.fromarray(self.current_array[self.current_frame]))
-        self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
-        self.img_panel.set_rois()
-
     def load_file(self):
         self.img_panel.fov_coords = self.fov_coords
         self.img_panel.roi_coords = self.init_roi_coords
-        self.current_array = self.img_array
-        self.update_frame()
-        self.activate_slider(self.ds.NumberOfFrames)
+        self.img_panel.current_array = self.img_array
+        self.img_panel.ctrl.update_frame()
+        self.img_panel.activate_slider(self.ds.NumberOfFrames)
         self.img_panel.activate_draw()
         self.update_dcm_info()
         self.set_img_name()

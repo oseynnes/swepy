@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
 
+from PIL import ImageTk, Image
+
 import utils
 
 
@@ -10,24 +12,41 @@ class ImgPanel(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.roi_coords = None
-        self.rect1 = self.rect2 = self.start_x = self.start_y = None
-        self.x = self.y = 0
+        self.view = parent
 
         self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
         self.canvas.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
         self.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
         self.columnconfigure(1, weight=4)
         self.rowconfigure(1, weight=4)
+
+        self.n_frames = 0
+        self.roi_coords = None
+        self.rect1 = self.rect2 = self.start_x = self.start_y = None
+        self.x = self.y = 0
         self.fov_coords = {'x0': 0,
                            'y0': 0,
                            'x1': int(self.canvas['width']),
                            'y1': int(self.canvas['height']) / 2}
 
+        # self.swe_array = None
+        self.current_array = None
+        self.img = None
+        self.img_name = None
+
+        self.ctrl = DisplayControls(self)
+        self.frame_label_var = tk.StringVar()
+
     def activate_draw(self):
         self.canvas.bind('<Button-1>', self.on_button_press)
         self.canvas.bind('<B1-Motion>', self.on_move_press)
         self.canvas.bind('<ButtonRelease-1>', self.on_button_release)
+
+    def activate_slider(self, n_frames):
+        self.n_frames = n_frames
+        self.ctrl.frame_label.config(text=f'{self.ctrl.current_frame + 1}/{n_frames}')
+        self.ctrl.slider.config(to=self.n_frames)
+        self.ctrl.slider.config(state='normal')  # activate slider
 
     def isin_fov(self):
         in_x_bounds = self.fov_coords['x0'] <= self.start_x <= self.fov_coords['x1']
@@ -144,18 +163,71 @@ class DisplayControls(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
+        self.img_panel = parent
+
         self.grid(row=4, column=1, sticky=tk.EW)
-        # self.columnconfigure(1, weight=4)
-        # self.rowconfigure(4, weight=1)
+
+        self.current_frame = 0
 
         self.pause = False  # control video pause
         self.play_btn = ttk.Button(self, width=5, text="Play")
         self.play_btn.pack(side='left')
+        self.play_btn['command'] = self.toggle_play_pause
 
         self.current_value = tk.DoubleVar()
         self.slider = ttk.Scale(self, from_=0, to=0, variable=self.current_value)
         self.slider['state'] = 'disabled'
         self.slider.pack(side='left', padx=5, pady=5, expand=True, fill='both')
+        self.slider['command'] = self.update_slider
 
         self.frame_label = ttk.Label(self, width=10, text='')
         self.frame_label.pack(side='left')
+
+    def update_slider(self, event):
+        if int(self.current_value.get()) < self.img_panel.n_frames:
+            self.current_frame = int(self.current_value.get())
+            self.frame_label.config(text=f'{self.current_frame + 1}/{self.img_panel.n_frames}')
+            self.update_frame()
+            self.img_panel.canvas.focus_set()
+
+    def toggle_play_pause(self):
+        if self.pause:
+            self.pause = False
+            self.play_btn.config(text='Play')
+            self.after_cancel(self.after_id)
+            self.img_panel.canvas.focus_set()
+        else:
+            self.pause = True
+            self.play_btn.config(text='Pause')
+            self.play_video()
+
+    def play_video(self):
+        if self.img_panel.current_array is not None:
+            self.update_frame()
+            self.current_frame += 1
+            if self.current_frame < self.img_panel.n_frames:
+                self.after_id = self.after(50, self.play_video)  # 50ms
+            else:
+                self.pause = False
+                self.play_btn.config(text='Play')
+                self.current_frame = 0
+        else:
+            utils.warn_no_video()
+            return
+
+    def update_frame(self):
+        self.current_value.set(self.current_frame)
+        self.frame_label.config(text=f'{self.current_frame + 1}/{self.img_panel.n_frames}')
+        self.img = ImageTk.PhotoImage(image=Image.fromarray(self.img_panel.current_array[self.current_frame]))
+        self.img_panel.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
+        self.img_panel.set_rois()
+
+    def left_key(self, event):
+        if int(self.current_value.get()) > 0:
+            self.current_frame -= 1
+            self.update_frame()
+
+    def right_key(self, event):
+        if int(self.current_value.get()) < self.img_panel.n_frames - 1:
+            self.current_frame += 1
+            self.update_frame()
