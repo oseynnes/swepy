@@ -8,7 +8,7 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
 from matplotlib.figure import Figure
 
 
-class FilesFrame(ttk.LabelFrame):
+class FilesPanel(ttk.LabelFrame):
     """Panel of GUI displaying analysed files"""
 
     def __init__(self, parent):
@@ -64,7 +64,7 @@ class SaveFrame(ttk.LabelFrame):
             dfs.to_excel(path, index_label='frame')
 
 
-class FigFrame(ttk.Frame):
+class FigPanel(ttk.Frame):
     """Panel of GUI holding commands to save data"""
 
     def __init__(self, parent):

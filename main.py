@@ -3,7 +3,7 @@ from pathlib import Path
 from tkinter import ttk
 
 import utils
-from output_frames import FilesFrame, SaveFrame, FigFrame
+from output_frames import FilesPanel, SaveFrame, FigPanel
 from processing import Data
 from root_frames import MenuBar
 from view_frames import ImgPanel, TopPanel, LeftPanel
@@ -147,7 +147,7 @@ class Controller:
         utils.pickle_results(self.data.path, self.data.results)
 
 
-class Output(ttk.Frame):  # TODO: move to other module
+class Output(ttk.Frame):
     """Tab frame displaying analysis output"""
 
     def __init__(self, parent):
@@ -159,37 +159,37 @@ class Output(ttk.Frame):  # TODO: move to other module
 
         self.results = None
 
-        self.files_frame = FilesFrame(self)
+        self.files_panel = FilesPanel(self)
         self.files = []
-        self.files_frame.tv.bind('<<TreeviewSelect>>', self.file_selected)
+        self.files_panel.tv.bind('<<TreeviewSelect>>', self.file_selected)
 
-        self.add_scrollbars(self.files_frame)  # TODO: fix scroll bar
+        self.add_scrollbars(self.files_panel)  # TODO: fix scroll bar
 
         self.save_frame = SaveFrame(self)
         self.save_frame.csv_btn['command'] = lambda: self.save_frame.export_to('csv')
         self.save_frame.xlsx_btn['command'] = lambda: self.save_frame.export_to('xlsx')
 
-        self.fig_frame = FigFrame(self)
+        self.fig_frame = FigPanel(self)
 
     def add_scrollbars(self, container):
-        sb_x = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.files_frame.tv.xview)
-        sb_y = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.files_frame.tv.yview)
-        self.files_frame.tv.configure(xscrollcommand=sb_x.set, yscrollcommand=sb_y.set)
+        sb_x = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.files_panel.tv.xview)
+        sb_y = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.files_panel.tv.yview)
+        self.files_panel.tv.configure(xscrollcommand=sb_x.set, yscrollcommand=sb_y.set)
         sb_x.grid(row=4, column=0, sticky='ew')
         sb_y.grid(row=0, column=1, sticky='ns')
 
     def add_to_file_list(self, path):
         """Add file name and path to list of analysed files"""
         self.files.append((path.name, path.resolve().parent))
-        if path.name in self.files_frame.tv.get_children():
-            self.files_frame.tv.delete(path.name)
-        self.files_frame.tv.insert('', tk.END, values=self.files[-1], iid=path.name)
-        self.files_frame.tv.focus(self.files_frame.tv.get_children()[-1])
+        if path.name in self.files_panel.tv.get_children():
+            self.files_panel.tv.delete(path.name)
+        self.files_panel.tv.insert('', tk.END, values=self.files[-1], iid=path.name)
+        self.files_panel.tv.focus(self.files_panel.tv.get_children()[-1])
 
     def file_selected(self, event):
         rows = []
-        for selected_item in self.files_frame.tv.selection():
-            item = self.files_frame.tv.item(selected_item)
+        for selected_item in self.files_panel.tv.selection():
+            item = self.files_panel.tv.item(selected_item)
             row = item['values']
             rows.append(row)
         if len(rows) == 1:
