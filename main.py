@@ -195,7 +195,7 @@ class Output(ttk.Frame):
         if len(rows) == 1:
             name = rows[0][0].split('.')[0]
             path = Path.cwd() / 'src' / f'{name}.pickle'
-            self.fig_frame.results = utils.load_pickle(path)
+            self.results = utils.load_pickle(path)
             self.fig_frame.change_plot()
 
     def clear_output(self):
