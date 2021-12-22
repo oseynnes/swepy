@@ -1,6 +1,7 @@
 import tkinter as tk
 import tkinter.filedialog as fd
 from pathlib import Path
+import webbrowser
 
 import utils
 
@@ -30,12 +31,12 @@ class MenuBar(tk.Menu):
         self.file_menu.add_command(label='Export to Excel',
                                    command=lambda: self.app.output.save_frame.export_to('xlsx'))
         self.file_menu.add_separator()
-        self.file_menu.add_command(label='Clear all results')  # TODO: Clear results command
+        self.file_menu.add_command(label='Clear all results', command=self.clear_all)
         self.file_menu.add_command(label='Quit', command=quit)
 
         self.help_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label='Help', underline=0, menu=self.help_menu)
-        self.help_menu.add_command(label='Swepy README')
+        self.help_menu.add_command(label='Swepy README', command=lambda: self.callback('https://tinyurl.com/swepy'))
 
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
@@ -48,3 +49,28 @@ class MenuBar(tk.Menu):
         path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
         self.path = Path(path)
         return self.path
+
+    def callback(self, url):
+        webbrowser.open_new(url)
+
+    def clear_all(self):
+        self.clear_treeview()
+        self.clear_figure()
+        self.clear_pickle()
+
+    def clear_treeview(self):
+        tree = self.app.output.files_panel.tv
+        tree.delete(*tree.get_children())
+
+    def clear_figure(self):
+        fig_lf = self.app.output.fig_frame.lf0
+        for widget in fig_lf.winfo_children():
+            widget.destroy()
+
+    @staticmethod
+    def clear_pickle():
+        src_path = Path.cwd() / 'src'
+        paths = list(Path(src_path).rglob('*.pickle'))
+        for path in paths:
+            path.unlink()
+
