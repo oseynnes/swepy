@@ -51,7 +51,6 @@ class SaveFrame(ttk.LabelFrame):
             format (str): extension of exported file (currently csv and xlsx)
         Returns: None
         """
-        print(f'self.results missing in export_to: {self.output.results is None}')
         if not self.output.results:
             return
         dir_path = self.output.results['file'][0]
