@@ -74,6 +74,7 @@ class View(ttk.Frame):
             return
 
     def get_swe_frames(self):
+        """Set GUI to display and analyse SWE unique scans only"""
         self.img_panel.swe_array = self.controller.get_swe_array(self.swe_fhz)
         self.img_panel.current_array = self.img_panel.swe_array
         self.img_panel.ctrl.current_value.set(0)
@@ -92,6 +93,7 @@ class View(ttk.Frame):
             self.left_panel.tv.insert(parent='', index=tk.END, values=row)
 
     def activate_arrowkeys(self):
+        """Bind left and right arrow keys to change of image"""
         self.canvas.focus_set()
         self.canvas.bind('<Left>', self.img_panel.ctrl.left_key)
         self.canvas.bind('<Right>', self.img_panel.ctrl.right_key)
@@ -100,6 +102,8 @@ class View(ttk.Frame):
         self.top.img_name.config(text=self.img_name)
 
     def load_file(self):
+        """Pass variables and scan array to ImgPanel frame, update View frame"""
+
         self.img_panel.fov_coords = self.fov_coords
         self.img_panel.roi_coords = self.init_roi_coords
         self.img_panel.current_array = self.img_array
@@ -120,6 +124,8 @@ class Controller:
         self.output = output
 
     def get_dicom_data(self):
+        """Load dicom data in View frame"""
+
         # TODO: link to a ttk.Progressbar widget (dicom loading is a few seconds)
         self.data.load_dicom()
         self.view.ds = self.data.ds
@@ -130,9 +136,13 @@ class Controller:
         self.view.load_file()
 
     def get_swe_array(self, swe_fhz):
+        """Call method to get array of SWE unique scans"""
+
         return self.data.resample(swe_fhz)
 
     def analyse(self):
+        """Get data and call methods for analysis and preview"""
+
         if not all([self.view.swe_fhz, self.view.max_scale]):
             utils.warn_wrong_entry()
             return
@@ -153,7 +163,7 @@ class Output(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.grid(row=0, column=0, columnspan=2, rowspan=5, sticky=tk.NSEW)
+        self.grid(row=0, column=0, columnspan=2, rowspan=5, padx=5, pady=5, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
 
@@ -161,7 +171,7 @@ class Output(ttk.Frame):
 
         self.files_panel = FilesPanel(self)
         self.files = []
-        self.files_panel.tv.bind('<<TreeviewSelect>>', self.file_selected)
+        self.files_panel.tv.bind('<<TreeviewSelect>>', self.handle_selected)
 
         self.add_scrollbars(self.files_panel)  # TODO: fix scroll bar
 
@@ -186,7 +196,8 @@ class Output(ttk.Frame):
         self.files_panel.tv.insert('', tk.END, values=self.files[-1], iid=path.name)
         self.files_panel.tv.focus(self.files_panel.tv.get_children()[-1])
 
-    def file_selected(self, event):
+    def handle_selected(self, event):
+        """"Load and plot data from selected file"""
         rows = []
         for selected_item in self.files_panel.tv.selection():
             item = self.files_panel.tv.item(selected_item)
@@ -197,13 +208,6 @@ class Output(ttk.Frame):
             path = Path.cwd() / 'src' / f'{name}.pickle'
             self.results = utils.load_pickle(path)
             self.fig_frame.change_plot()
-
-    def clear_output(self):
-        # TODO: connect clear output to menu command
-        # clear treeview
-        # clear figure
-        # delete output files
-        pass
 
 
 class App(tk.Tk):
@@ -234,12 +238,18 @@ class App(tk.Tk):
         self.nb.add(self.output, text='Results')
 
     def load_file(self):
-        """Instantiate classes specific to a file"""
+        """Instantiate classes specific to a dicom file"""
+
         self.data = Data(self.path)
         self.view = View(self.nb)
 
     def reset(self, path=None):
-        """Reset file processing"""
+        """Reset file processing
+        Args:
+            path: pathlib path to dicom file
+        Returns: None
+        """
+
         self.path = path if path else self.mb.select_file()
         utils.save_path(str(self.path.resolve()))
         self.nb.forget(self.view)
