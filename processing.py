@@ -65,14 +65,14 @@ class Data:
         swe_indices = np.arange(start=3, stop=self.img_array.shape[0], step=frame_step)  # only works for sequences!
         swe_indices = np.insert(swe_indices, 0, 0)
         self.swe_array = self.img_array[swe_indices, :, :]
-        return self.swe_array
+        return self.swe_array  # TODO: replace with detecting method L84 in SWE>dicom_io.py
 
     def get_rois(self):
         """Index sub-array of unique SWE frames at SWE ROI coordinates"""
         self.rois = self.swe_array[:,
-                    self.roi_coords['y0']:self.roi_coords['y1'],
-                    self.roi_coords['x0']:self.roi_coords['x1'],
-                    :]
+                                   self.roi_coords['y0']:self.roi_coords['y1'],
+                                   self.roi_coords['x0']:self.roi_coords['x1'],
+                                   :]
         return self.rois
 
     def remove_voids(self):  # TODO: filter function
