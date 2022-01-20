@@ -163,6 +163,8 @@ class Output(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
+        self.app = parent
+
         self.grid(row=0, column=0, columnspan=2, rowspan=5, padx=5, pady=5, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
@@ -205,7 +207,7 @@ class Output(ttk.Frame):
             rows.append(row)
         if len(rows) == 1:
             name = rows[0][0].split('.')[0]
-            path = Path.cwd() / 'src' / f'{name}.pickle'
+            path = Path.cwd() / 'src' / 'cache' / f'{name}.pickle'
             self.results = utils.load_pickle(path)
             self.fig_frame.change_plot()
 
@@ -217,7 +219,7 @@ class App(tk.Tk):
         super().__init__()
 
         self.title('SwePy')
-        window_width = 950
+        window_width = 990
         window_height = 690
         utils.set_win_geometry(self, window_width, window_height)
         self.columnconfigure(1, weight=4)
@@ -251,15 +253,17 @@ class App(tk.Tk):
         """
 
         self.path = path if path else self.mb.select_file()
-        utils.save_path(str(self.path.resolve()))
-        self.nb.forget(self.view)
-        self.load_file()
-        self.data.path = self.path
-        self.nb.insert(0, self.view, text='Image processing')
-        self.nb.select(self.view)
-        controller = Controller(self.data, self.view, self.output)
-        self.view.set_controller(controller)
-        controller.get_dicom_data()
+        if self.path:
+            self.nb.forget(self.view)
+            self.load_file()
+            self.data.path = self.path
+            self.nb.insert(0, self.view, text='Image processing')
+            self.nb.select(self.view)
+            controller = Controller(self.data, self.view, self.output)
+            self.view.set_controller(controller)
+            controller.get_dicom_data()
+        else:
+            return
 
 
 if __name__ == '__main__':

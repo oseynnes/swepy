@@ -49,8 +49,8 @@ def save_pickle(content, path):
 
 def load_settings(param):
     """Load settings from previous analyses"""
-    dir_path = Path.cwd() / 'src'
-    json_path = dir_path / 'temp.json'
+    dir_path = Path.cwd() / 'src' / 'cache'
+    json_path = dir_path / 'settings.json'
 
     if json_path.exists():
         temp = load_json(json_path)
@@ -62,8 +62,8 @@ def load_settings(param):
 
 def save_path(path):
     """Add file path to a list of recent file paths, in a JSON file"""
-    dir_path = Path.cwd() / 'src'
-    json_path = dir_path / 'temp.json'
+    dir_path = Path.cwd() / 'src' / 'cache'
+    json_path = dir_path / 'settings.json'
 
     if json_path.exists():
         temp = load_json(json_path)
@@ -85,8 +85,8 @@ def save_path(path):
 
 def save_usr_input(fhz, scale):
     """Save SWE frequency and max. scale from colour bar"""
-    dir_path = Path.cwd() / 'src'
-    json_path = dir_path / 'temp.json'
+    dir_path = Path.cwd() / 'src' / 'cache'
+    json_path = dir_path / 'settings.json'
 
     if json_path.exists():
         temp = load_json(json_path)
@@ -95,17 +95,15 @@ def save_usr_input(fhz, scale):
 
 
 def pickle_results(file_path, data):
-    """Add analysis results to a JSON file
+    """Add analysis results to a pickle file
     Args:
         file_path (pathlib.PosixPath): path to analysed file
         data (dict): analysis results
     Returns: None
     """
-    dir_path = Path.cwd() / 'src'
+    dir_path = Path.cwd() / 'src' / 'cache'
     pickle_path = dir_path / f'{file_path.stem}.pickle'
 
-    # temp = {str(file_path): data}
-    # save_pickle(temp, pickle_path)
     save_pickle(data, pickle_path)
 
 

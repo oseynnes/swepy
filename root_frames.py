@@ -40,17 +40,21 @@ class MenuBar(tk.Menu):
 
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
-        temp_path = Path.cwd() / 'src' / 'temp.json'
+        temp_path = Path.cwd() / 'src' / 'cache' / 'settings.json'
         if temp_path.exists():
             temp = utils.load_json(temp_path)
             initialdir = Path(temp['RECENT_PATHS'][0]).parent
         else:
             initialdir = '/'
         path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
-        self.path = Path(path)
-        return self.path
+        if path:
+            self.path = Path(path)
+            utils.save_path(str(self.path.resolve()))
+            return self.path
+        else:
+            return
 
-    def callback(self, url):
+    def callback(self, url):  #TODO: change to static (don't need self)
         webbrowser.open_new(url)
 
     def clear_all(self):
