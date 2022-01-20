@@ -54,7 +54,8 @@ class MenuBar(tk.Menu):
         else:
             return
 
-    def callback(self, url):  #TODO: change to static (don't need self)
+    @staticmethod
+    def callback(url):
         webbrowser.open_new(url)
 
     def clear_all(self):
