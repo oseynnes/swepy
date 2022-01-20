@@ -163,8 +163,6 @@ class Output(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.app = parent
-
         self.grid(row=0, column=0, columnspan=2, rowspan=5, padx=5, pady=5, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)

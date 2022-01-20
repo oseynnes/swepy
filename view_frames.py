@@ -29,7 +29,6 @@ class ImgPanel(ttk.Frame):
                            'x1': int(self.canvas['width']),
                            'y1': int(self.canvas['height']) / 2}
 
-        # self.swe_array = None
         self.current_array = None
         self.img = None
         self.img_name = None
