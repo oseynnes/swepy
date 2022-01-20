@@ -4,6 +4,7 @@ from pathlib import Path
 from tkinter.messagebox import showinfo, showerror
 
 import numpy as np
+import webbrowser
 
 
 def warn_no_video():
@@ -233,3 +234,8 @@ def get_area(coords):
     l1 = coords['x1'] - coords['x0']
     l2 = coords['y1'] - coords['y0']
     return l1 * l2
+
+
+def callback(url):
+    """open webpage"""
+    webbrowser.open_new(url)

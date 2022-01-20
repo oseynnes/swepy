@@ -1,7 +1,6 @@
 import tkinter as tk
 import tkinter.filedialog as fd
 from pathlib import Path
-import webbrowser
 
 import utils
 
@@ -36,7 +35,7 @@ class MenuBar(tk.Menu):
 
         self.help_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label='Help', underline=0, menu=self.help_menu)
-        self.help_menu.add_command(label='Swepy README', command=lambda: self.callback('https://tinyurl.com/swepy'))
+        self.help_menu.add_command(label='Swepy README', command=lambda: utils.callback('https://tinyurl.com/swepy'))
 
     def select_file(self):
         filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
@@ -53,10 +52,6 @@ class MenuBar(tk.Menu):
             return self.path
         else:
             return
-
-    @staticmethod
-    def callback(url):
-        webbrowser.open_new(url)
 
     def clear_all(self):
         self.clear_treeview()
