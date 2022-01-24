@@ -70,9 +70,9 @@ class Data:
     def get_rois(self):
         """Index sub-array of unique SWE frames at SWE ROI coordinates"""
         self.rois = self.swe_array[:,
-                                   self.roi_coords['y0']:self.roi_coords['y1'],
-                                   self.roi_coords['x0']:self.roi_coords['x1'],
-                                   :]
+                    self.roi_coords['y0']:self.roi_coords['y1'],
+                    self.roi_coords['x0']:self.roi_coords['x1'],
+                    :]
         return self.rois
 
     def remove_voids(self):  # TODO: filter function
@@ -104,7 +104,7 @@ class Data:
         # TODO: implement method to detect variable measured in SWE scans (assume shear_m here)
         self.source_var = 'youngs_m'
         target_vars = ['velocity', 'shear_m', 'youngs_m']
-        d = {'file': [self.path.parent, self.path.stem], 'raw': {}, 'stats': {}}
+        d = {'file': [self.path.stem, self.path.parent], 'raw': {}, 'stats': {}}
         for target_var in target_vars:
             if target_var == self.source_var:
                 d['raw'][target_var] = self.mapped_values

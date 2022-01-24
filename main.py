@@ -3,9 +3,9 @@ from pathlib import Path
 from tkinter import ttk
 
 import utils
-from output_frames import FilesPanel, SaveFrame, FigPanel
+from output_frames import FilesPanel, HistoryPanel, SavePanel, FigPanel
 from processing import Data
-from root_frames import MenuBar
+from root_widgets import MenuBar
 from view_frames import ImgPanel, TopPanel, LeftPanel
 
 
@@ -151,9 +151,9 @@ class Controller:
         self.data.roi_coords = self.view.img_panel.roi_coords
         self.data.analyse_roi(self.data.get_rois())
         self.output.results = self.data.results
-        self.output.fig_frame.replot_data(self.data.results['raw'][self.data.source_var],
+        self.output.fig_panel.replot_data(self.data.results['raw'][self.data.source_var],
                                           self.data.source_var)
-        self.output.add_to_file_list(self.data.path)
+        self.output.update_tv(self.data.path)
         utils.pickle_results(self.data.path, self.data.results)
 
 
@@ -163,51 +163,65 @@ class Output(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.grid(row=0, column=0, columnspan=2, rowspan=5, padx=5, pady=5, sticky=tk.NSEW)
+        self.app = parent
+
+        self.grid(row=0, column=0, columnspan=2, rowspan=6, padx=5, pady=5, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
 
         self.results = None
 
         self.files_panel = FilesPanel(self)
-        self.files = []
-        self.files_panel.tv.bind('<<TreeviewSelect>>', self.handle_selected)
+        self.tv_files = []
+        self.tv_selection = set()
+        self.files_panel.tv.bind('<<TreeviewSelect>>', self.update_tv_selection)
 
         self.add_scrollbars(self.files_panel)  # TODO: fix scroll bar
 
-        self.save_frame = SaveFrame(self)
-        self.save_frame.csv_btn['command'] = lambda: self.save_frame.export_to('csv')
-        self.save_frame.xlsx_btn['command'] = lambda: self.save_frame.export_to('xlsx')
+        self.previous = HistoryPanel(self)
+        self.previous.load_btn['command'] = self.load_previous
+        self.previous.clear_all_btn['command'] = self.clear_all
 
-        self.fig_frame = FigPanel(self)
+        self.save_panel = SavePanel(self)
+
+        self.fig_panel = FigPanel(self)
 
     def add_scrollbars(self, container):
         sb_x = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=self.files_panel.tv.xview)
         sb_y = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.files_panel.tv.yview)
         self.files_panel.tv.configure(xscrollcommand=sb_x.set, yscrollcommand=sb_y.set)
-        sb_x.grid(row=4, column=0, sticky='ew')
+        sb_x.grid(row=1, column=0, sticky='ew')
         sb_y.grid(row=0, column=1, sticky='ns')
 
-    def add_to_file_list(self, path):
+    def update_tv(self, path):
         """Add file name and path to list of analysed files"""
-        self.files.append((path.name, path.resolve().parent))
+        self.tv_files.append((path.name, path.resolve().parent))
         if path.name in self.files_panel.tv.get_children():
             self.files_panel.tv.delete(path.name)
-        self.files_panel.tv.insert('', tk.END, values=self.files[-1], iid=path.name)
+        self.files_panel.tv.insert('', tk.END, values=self.tv_files[-1], iid=path.name)
         self.files_panel.tv.focus(self.files_panel.tv.get_children()[-1])
 
-    def handle_selected(self, event):
-        """"Load and plot data from selected file"""
-        rows = []
+    def update_tv_selection(self, event):
+        """Update list of selected rows in list of analysed files"""
         for selected_item in self.files_panel.tv.selection():
             item = self.files_panel.tv.item(selected_item)
             row = item['values']
-            rows.append(row)
-        if len(rows) == 1:
-            name = rows[0][0].split('.')[0]
-            path = Path.cwd() / 'src' / 'cache' / f'{name}.pickle'
-            self.results = utils.load_pickle(path)
-            self.fig_frame.change_plot()
+            self.tv_selection.add(tuple(row))
+        rows = list(self.tv_selection)
+        name = rows[0][0].split('.')[0]
+        path = Path.cwd() / 'src' / 'cache' / f'{name}.pickle'
+        self.results = utils.load_pickle(path)
+        self.fig_panel.change_plot()
+
+    def clear_all(self):
+        self.files_panel.clear_treeview()
+        self.fig_panel.clear_figure()
+        utils.clear_pickle()
+
+    def load_previous(self):
+        """Load cached results from previous analyses"""
+        paths = self.previous.select_cached()
+        self.files_panel.load_tv_from_pickle(paths)
 
 
 class App(tk.Tk):
@@ -268,4 +282,4 @@ if __name__ == '__main__':
     app = App()
     app.mainloop()
 
-    # TODO: - add doctrings to functions
+    # TODO: - add doctrings to all functions

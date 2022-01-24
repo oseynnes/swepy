@@ -26,11 +26,11 @@ class MenuBar(tk.Menu):
 
         self.file_menu.add_separator()
         self.file_menu.add_command(label='Export to CSV',
-                                   command=lambda: self.app.output.save_frame.export_to('csv'))
+                                   command=lambda: self.app.output.save_panel.export('csv'))
         self.file_menu.add_command(label='Export to Excel',
-                                   command=lambda: self.app.output.save_frame.export_to('xlsx'))
+                                   command=lambda: self.app.output.save_panel.export('xlsx'))
         self.file_menu.add_separator()
-        self.file_menu.add_command(label='Clear all results', command=self.clear_all)
+        self.file_menu.add_command(label='Clear all results', command=lambda: self.app.output.clear_all())
         self.file_menu.add_command(label='Quit', command=quit)
 
         self.help_menu = tk.Menu(self, tearoff=0)
@@ -52,25 +52,3 @@ class MenuBar(tk.Menu):
             return self.path
         else:
             return
-
-    def clear_all(self):
-        self.clear_treeview()
-        self.clear_figure()
-        self.clear_pickle()
-
-    def clear_treeview(self):
-        tree = self.app.output.files_panel.tv
-        tree.delete(*tree.get_children())
-
-    def clear_figure(self):
-        fig_lf = self.app.output.fig_frame.lf0
-        for widget in fig_lf.winfo_children():
-            widget.destroy()
-
-    @staticmethod
-    def clear_pickle():
-        src_path = Path.cwd() / 'src'
-        paths = list(Path(src_path).rglob('*.pickle'))
-        for path in paths:
-            path.unlink()
-

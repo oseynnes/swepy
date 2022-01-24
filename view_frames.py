@@ -6,6 +6,74 @@ from PIL import ImageTk, Image
 import utils
 
 
+class TopPanel(ttk.Frame):
+    """Panel of GUI displaying file name"""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        options = {'fill': 'x', 'padx': 5, 'pady': 5}
+
+        self.grid(row=0, column=1, sticky=tk.EW)
+
+        self.img_name = ttk.Label(self, anchor=tk.CENTER, text='')
+        self.img_name.pack(**options)
+
+
+class LeftPanel(ttk.Frame):
+    """Panel of GUI displaying widgets related to file opening and analysis"""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        self.grid(row=1, column=0, rowspan=3, sticky=tk.NSEW)
+
+        self.input_frame = ttk.LabelFrame(self, text='User input')
+        self.input_frame.grid(row=0, column=0, sticky=tk.NSEW)
+
+        fhz_label = ttk.Label(self.input_frame, text='SWE fhz:')
+        fhz_label.grid(column=0, row=0, sticky=tk.W, padx=5)
+        self.usr_fhz = tk.StringVar()
+        self.fhz_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_fhz)
+        self.fhz_entry.grid(column=1, row=0, sticky=tk.E, padx=5)
+
+        scale_label = ttk.Label(self.input_frame, text='max. scale:')
+        scale_label.grid(column=0, row=1, sticky=tk.W, padx=5)
+        self.usr_scale = tk.StringVar()
+        self.scale_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_scale)
+        self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5)
+
+        self.usr_params = utils.load_settings('SWE_PARAM')
+        if self.usr_params:
+            self.usr_fhz.set(self.usr_params[0])
+            self.usr_scale.set(self.usr_params[1])
+
+        self.enter_btn = ttk.Button(self.input_frame, text='OK', width=2)
+        self.enter_btn.grid(column=1, row=3, sticky=tk.E, padx=5, pady=5)
+
+        self.space_frame = ttk.Frame(self)
+        self.space_frame.grid(row=1, column=0, sticky=tk.NSEW)
+        spacer = tk.Label(self.space_frame, text='')
+        spacer.grid()
+
+        self.tree_frame = ttk.Frame(self)
+        self.tree_frame.grid(row=2, column=0, sticky=tk.NSEW)
+        columns = ('dcm_property', 'value')
+        self.variables = ('No. of frames', 'No. of rows', 'No. of columns', 'B mode Fhz')
+        self.values = (None,)
+        self.tv = ttk.Treeview(self.tree_frame, columns=columns, show='headings')
+        self.tv.heading('dcm_property', text="DCM Property")
+        self.tv.column('dcm_property', width=100)
+        self.tv.heading("value", text="Value")
+        self.tv.column('value', width=50)
+        self.tv.grid(sticky=tk.NSEW)
+
+        self.reset_roi_btn = ttk.Button(self.tree_frame, text="Reset ROI", width=8)
+        self.reset_roi_btn.grid(sticky=tk.W)
+
+        self.analyse_btn = ttk.Button(self.tree_frame, text="Analyse", width=8)
+        self.analyse_btn.grid(sticky=tk.W)
+
+
 class ImgPanel(ttk.Frame):
     """Panel of GUI displaying images"""
 
@@ -86,74 +154,6 @@ class ImgPanel(ttk.Frame):
         keys = ('x0', 'y0', 'x1', 'y1')
         self.roi_coords = dict(zip(keys, self.canvas.coords(self.rect1)))
         self.roi_coords = {k: int(v) for k, v in self.roi_coords.items()}
-
-
-class TopPanel(ttk.Frame):
-    """Panel of GUI displaying file name"""
-
-    def __init__(self, parent):
-        super().__init__(parent)
-        options = {'fill': 'x', 'padx': 5, 'pady': 5}
-
-        self.grid(row=0, column=1, sticky=tk.EW)
-
-        self.img_name = ttk.Label(self, anchor=tk.CENTER, text='')
-        self.img_name.pack(**options)
-
-
-class LeftPanel(ttk.Frame):
-    """Panel of GUI displaying widgets related to file opening and analysis"""
-
-    def __init__(self, parent):
-        super().__init__(parent)
-
-        self.grid(row=1, column=0, rowspan=3, sticky=tk.NSEW)
-
-        self.input_frame = ttk.LabelFrame(self, text='User input')
-        self.input_frame.grid(row=0, column=0, sticky=tk.NSEW)
-
-        fhz_label = ttk.Label(self.input_frame, text='SWE fhz:')
-        fhz_label.grid(column=0, row=0, sticky=tk.W, padx=5)
-        self.usr_fhz = tk.StringVar()
-        self.fhz_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_fhz)
-        self.fhz_entry.grid(column=1, row=0, sticky=tk.E, padx=5)
-
-        scale_label = ttk.Label(self.input_frame, text='max. scale:')
-        scale_label.grid(column=0, row=1, sticky=tk.W, padx=5)
-        self.usr_scale = tk.StringVar()
-        self.scale_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_scale)
-        self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5)
-
-        self.usr_params = utils.load_settings('SWE_PARAM')
-        if self.usr_params:
-            self.usr_fhz.set(self.usr_params[0])
-            self.usr_scale.set(self.usr_params[1])
-
-        self.enter_btn = ttk.Button(self.input_frame, text='OK', width=2)
-        self.enter_btn.grid(column=1, row=3, sticky=tk.E, padx=5, pady=5)
-
-        self.space_frame = ttk.Frame(self)
-        self.space_frame.grid(row=1, column=0, sticky=tk.NSEW)
-        spacer = tk.Label(self.space_frame, text='')
-        spacer.grid()
-
-        self.tree_frame = ttk.Frame(self)
-        self.tree_frame.grid(row=2, column=0, sticky=tk.NSEW)
-        columns = ('dcm_property', 'value')
-        self.variables = ('No. of frames', 'No. of rows', 'No. of columns', 'B mode Fhz')
-        self.values = (None,)
-        self.tv = ttk.Treeview(self.tree_frame, columns=columns, show='headings')
-        self.tv.heading('dcm_property', text="DCM Property")
-        self.tv.column('dcm_property', width=100)
-        self.tv.heading("value", text="Value")
-        self.tv.column('value', width=50)
-        self.tv.grid(sticky=tk.NSEW)
-
-        self.reset_roi_btn = ttk.Button(self.tree_frame, text="Reset ROI", width=8)
-        self.reset_roi_btn.grid(sticky=tk.W)
-
-        self.analyse_btn = ttk.Button(self.tree_frame, text="Analyse", width=8)
-        self.analyse_btn.grid(sticky=tk.W)
 
 
 class DisplayControls(ttk.Frame):

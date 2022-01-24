@@ -5,10 +5,12 @@ from tkinter.messagebox import showinfo, showerror
 
 import numpy as np
 import webbrowser
+import pandas as pd
 
 
 def warn_no_video():
-    showinfo(title='No video', message='Please load a Dicom file first')
+    showinfo(title='No video',
+             message='Please load a Dicom file first')
 
 
 def warn_wrong_entry():
@@ -16,7 +18,18 @@ def warn_wrong_entry():
               message='Please inform the frequency and scale fields with a number')
 
 
+def warn_no_selection():
+    showinfo(title='No Selection',
+             message='Please select at least one file in the list')
+
+
+def warn_empty_cache():
+    showinfo(title='No previous results',
+             message='The list of previously analysed files is empty')
+
+
 def set_win_geometry(container, width, height):
+    """Set window position relative to screen size"""
     screen_width = container.winfo_screenwidth()
     screen_height = container.winfo_screenheight()
     center_x = int(screen_width / 2 - width / 2)
@@ -46,6 +59,14 @@ def save_pickle(content, path):
     """Pickle a content object"""
     with open(path, 'wb') as handle:
         pickle.dump(content, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def clear_pickle():
+    """Delete pickle files from cache directory"""
+    src_path = Path.cwd() / 'src' / 'cache'
+    paths = list(Path(src_path).rglob('*.pickle'))
+    for path in paths:
+        path.unlink()
 
 
 def load_settings(param):
@@ -239,3 +260,29 @@ def get_area(coords):
 def callback(url):
     """open webpage"""
     webbrowser.open_new(url)
+
+
+def export(file_format, selection=None, everything=True):
+    """Export stats for each unique SWE frame
+    Args:
+        file_format (str): extension of exported file (currently csv and xlsx)
+        selection (list): rows selected in treeview
+        everything:
+    Returns: None
+    """
+    if everything:
+        pass
+    elif selection:
+        for row in selection:
+            name = row[0].split('.')[0]
+            import_path = Path.cwd() / 'src' / 'cache' / f'{name}.pickle'
+            results = load_pickle(import_path)
+            export_path = Path(row[1]) / f'{name}.{file_format}'  # TODO: make results folder if it does not exists
+            dfs = pd.DataFrame.from_dict(results['stats'])
+            if file_format == 'csv':
+                dfs.to_csv(export_path, index_label='frame')
+            if file_format == 'xlsx':
+                dfs.to_excel(export_path, index_label='frame')
+    else:
+        warn_no_selection()
+        return
