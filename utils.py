@@ -261,28 +261,3 @@ def callback(url):
     """open webpage"""
     webbrowser.open_new(url)
 
-
-def export(file_format, selection=None, everything=True):
-    """Export stats for each unique SWE frame
-    Args:
-        file_format (str): extension of exported file (currently csv and xlsx)
-        selection (list): rows selected in treeview
-        everything:
-    Returns: None
-    """
-    if everything:
-        pass
-    elif selection:
-        for row in selection:
-            name = row[0].split('.')[0]
-            import_path = Path.cwd() / 'src' / 'cache' / f'{name}.pickle'
-            results = load_pickle(import_path)
-            export_path = Path(row[1]) / f'{name}.{file_format}'  # TODO: make results folder if it does not exists
-            dfs = pd.DataFrame.from_dict(results['stats'])
-            if file_format == 'csv':
-                dfs.to_csv(export_path, index_label='frame')
-            if file_format == 'xlsx':
-                dfs.to_excel(export_path, index_label='frame')
-    else:
-        warn_no_selection()
-        return
