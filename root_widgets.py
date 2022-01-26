@@ -52,3 +52,6 @@ class MenuBar(tk.Menu):
             return self.path
         else:
             return
+        # TODO: implement possibility to analyse several files at once, with the same SWE settings and ROI
+        # paths = fd.askopenfilenames(initialdir=initialdir, title="Select dicom file(s)", filetypes=filetypes)
+

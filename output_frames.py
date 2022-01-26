@@ -159,6 +159,7 @@ class FigPanel(ttk.Frame):
         D = self.output.results['raw'][self.var]
         self.replot_data(D, self.var)
 
+
     def replot_data(self, D, swe_var):
         """Reset widgets to plot new data
         Args:
@@ -180,6 +181,7 @@ class FigPanel(ttk.Frame):
         axes = figure.add_subplot()
 
         if np.mean(D) > 0:
+            print(f'array with shape {D.shape} and mean {np.mean(D)} being plotted')
             vp = axes.violinplot(plot_data.tolist(), widths=1,
                                  showmeans=True, showmedians=True, showextrema=False)
 

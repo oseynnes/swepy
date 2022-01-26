@@ -203,6 +203,7 @@ class Output(ttk.Frame):
 
     def update_tv_selection(self, event):
         """Update list of selected rows in list of analysed files"""
+        self.tv_selection.clear()
         for selected_item in self.files_panel.tv.selection():
             item = self.files_panel.tv.item(selected_item)
             row = item['values']
