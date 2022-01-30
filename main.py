@@ -19,6 +19,8 @@ class View(ttk.Frame):
         self.columnconfigure(1, weight=4)
         self.rowconfigure(1, weight=4)
 
+        self.block = tk.BooleanVar(self, True)
+
         self.ds = None
         self.img_array = None
         self.img_name = None
@@ -47,8 +49,10 @@ class View(ttk.Frame):
         self.img_panel.set_rois()
 
     def analyse(self):
+
         if self.ds:
             self.controller.analyse()
+            self.block.set(False)
         else:
             utils.warn_no_video()
             return
@@ -163,8 +167,6 @@ class Output(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.app = parent
-
         self.grid(row=0, column=0, columnspan=2, rowspan=6, padx=5, pady=5, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=3)
@@ -247,29 +249,30 @@ class App(tk.Tk):
         self.nb.grid(row=0, column=0, rowspan=4, columnspan=2, sticky=tk.NSEW)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=4)
-        self.load_file()
+        self.set_img_proc()
         self.output = Output(self.nb)
         self.nb.add(self.view, text='Image processing')
         self.nb.add(self.output, text='Results')
 
-    def load_file(self):
+    def set_img_proc(self):
         """Instantiate classes specific to a dicom file"""
 
         self.data = Data(self.path)
         self.view = View(self.nb)
 
-    def reset(self, path=None):
+    def reset(self, path):
         """Reset file processing
         Args:
             path: pathlib path to dicom file
         Returns: None
         """
 
-        self.path = path if path else self.mb.select_file()
-        if self.path:
+        if path:
+            self.path = path
             self.nb.forget(self.view)
-            self.load_file()
+            self.set_img_proc()
             self.data.path = self.path
+            utils.save_path(str(self.path.resolve()))
             self.nb.insert(0, self.view, text='Image processing')
             self.nb.select(self.view)
             controller = Controller(self.data, self.view, self.output)
@@ -277,6 +280,25 @@ class App(tk.Tk):
             controller.get_dicom_data()
         else:
             return
+
+    def paths_handler(self):
+        """Handle single/multiple path selection(s)"""
+        # TODO: add progressbar
+        paths = self.mb.select_files()
+        if len(paths) > 0:
+            self.reset(paths[0])
+            self.wait_variable(self.view.block)
+            if len(paths) > 1 and self.view.block.get() is False:
+                cached_path = Path.cwd() / 'src' / 'cache' / f'{paths[0].stem}.pickle'
+                cached_file1 = utils.load_pickle(cached_path)
+                roi_coords = cached_file1['roi_coords']
+                for i, path in enumerate(paths[1:]):
+                    self.reset(path)
+                    self.view.get_usr_entry()
+                    self.view.init_roi_coords = roi_coords
+                    self.view.reset_rois()
+                    self.view.analyse()
+                self.nb.select(self.output)
 
 
 if __name__ == '__main__':

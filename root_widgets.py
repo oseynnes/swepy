@@ -16,7 +16,8 @@ class MenuBar(tk.Menu):
 
         self.file_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label='File', underline=0, menu=self.file_menu)
-        self.file_menu.add_command(label='Open...', command=lambda: self.app.reset())
+        # self.file_menu.add_command(label='Open...', command=lambda: self.app.reset())
+        self.file_menu.add_command(label='Open...', command=lambda: self.app.paths_handler())
 
         recent_paths = tk.Menu(self.file_menu, tearoff=0)
         paths_list = utils.load_settings('RECENT_PATHS')
@@ -48,10 +49,24 @@ class MenuBar(tk.Menu):
         path = fd.askopenfilename(initialdir=initialdir, title="Select dicom file", filetypes=filetypes)
         if path:
             self.path = Path(path)
-            utils.save_path(str(self.path.resolve()))
+            # utils.save_path(str(self.path.resolve()))
             return self.path
         else:
             return
         # TODO: implement possibility to analyse several files at once, with the same SWE settings and ROI
         # paths = fd.askopenfilenames(initialdir=initialdir, title="Select dicom file(s)", filetypes=filetypes)
 
+    def select_files(self):
+        filetypes = (('dicom files', '*.dcm'), ('All files', '*.*'))
+        temp_path = Path.cwd() / 'src' / 'cache' / 'settings.json'
+        if temp_path.exists():
+            temp = utils.load_json(temp_path)
+            initialdir = Path(temp['RECENT_PATHS'][0]).parent
+        else:
+            initialdir = '/'
+        paths = fd.askopenfilenames(initialdir=initialdir, title="Select dicom file(s)", filetypes=filetypes)
+        if paths:
+            self.paths = [Path(path) for path in paths]
+            return self.paths
+        else:
+            return

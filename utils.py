@@ -1,11 +1,10 @@
 import json
 import pickle
+import webbrowser
 from pathlib import Path
 from tkinter.messagebox import showinfo, showerror
 
 import numpy as np
-import webbrowser
-import pandas as pd
 
 
 def warn_no_video():
@@ -113,6 +112,17 @@ def save_usr_input(fhz, scale):
     if json_path.exists():
         temp = load_json(json_path)
         temp['SWE_PARAM'] = [fhz, scale]
+        save_json(temp, json_path)
+
+
+def save_roi_coords(roi_coords):
+    """Save roi coordinates from 1st analysed file"""
+    dir_path = Path.cwd() / 'src' / 'cache'
+    json_path = dir_path / 'settings.json'
+
+    if json_path.exists():
+        temp = load_json(json_path)
+        temp['ROI_COORDS'] = [roi_coords]
         save_json(temp, json_path)
 
 
@@ -260,4 +270,3 @@ def get_area(coords):
 def callback(url):
     """open webpage"""
     webbrowser.open_new(url)
-

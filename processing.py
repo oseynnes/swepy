@@ -104,7 +104,10 @@ class Data:
         # TODO: implement method to detect variable measured in SWE scans (assume shear_m here)
         self.source_var = 'youngs_m'
         target_vars = ['velocity', 'shear_m', 'youngs_m']
-        d = {'file': [self.path.stem, self.path.parent], 'raw': {}, 'stats': {}}
+        d = {'file': [self.path.stem, self.path.parent],
+             'roi_coords': self.roi_coords,
+             'raw': {},
+             'stats': {}}
         for target_var in target_vars:
             if target_var == self.source_var:
                 d['raw'][target_var] = self.mapped_values
