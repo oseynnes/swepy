@@ -153,7 +153,7 @@ class Controller:
         self.data.swe_fhz = self.view.swe_fhz
         self.data.max_scale = self.view.max_scale
         self.data.roi_coords = self.view.img_panel.roi_coords
-        self.data.analyse_roi(self.data.get_rois())
+        self.data.analyse_roi()
         self.output.results = self.data.results
         self.output.fig_panel.replot_data(self.data.results['raw'][self.data.source_var],
                                           self.data.source_var)

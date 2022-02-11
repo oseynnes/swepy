@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.ma as ma
 from pydicom import dcmread
 from pydicom.pixel_data_handlers.util import convert_color_space
 
@@ -25,6 +26,8 @@ class Data:
         self.swe_fhz = None
         self.max_scale = None
         self.results = None
+
+        self.void_threshold = 150  # value used in Elastogui
 
     def get_img_name(self):
         if self.path:
@@ -73,16 +76,33 @@ class Data:
                     self.roi_coords['y0']:self.roi_coords['y1'],
                     self.roi_coords['x0']:self.roi_coords['x1'],
                     :]
-        return self.rois
 
-    def remove_voids(self):  # TODO: filter function
-        # find voids (RGB values?)
-        # apply median filter, replacing each pixel with the median of the neighboring pixel values
-        # radius=5?
-        pass
+    def void_filter(self):
+        """Create mask of void pixels in image array
+        Args:
+            img_roi: 3D image array with RGB channels in 3rd dimension
+            threshold (int): user defined threshold of cumulative difference between channels
+        Returns: mask of void pixels
+        """
+        # assign threshold to max value (3*255) if it is None
+        threshold = self.void_threshold if isinstance(self.void_threshold, int) else 765
+        arr = np.copy(self.rois)
+        # NB: important to convert channel values to float before calculations
+        r = arr[:, :, :, 0].astype(np.float32)
+        g = arr[:, :, :, 1].astype(np.float32)
+        b = arr[:, :, :, 2].astype(np.float32)
+        rg_diff = np.abs(np.subtract(r, g))
+        rb_diff = np.abs(np.subtract(r, b))
+        gb_diff = np.abs(np.subtract(g, b))
+        cumulated_diff = rg_diff + rb_diff + gb_diff
+        void_mask = cumulated_diff > threshold
+        return void_mask
 
-    def get_colour_scale(self):
-        """Thin colour bar to one pixel width and set matching scale based on max. scale value"""
+    def set_colour_scale(self):
+        """
+        Thin colour bar to one pixel width and set matching scale based on max. scale value
+        Returns: colour profile and corresponding "real values" of velocity or modulus
+        """
         colour_bar = {'x0': 693, 'y0': 71, 'x1': 700,
                       'y1': 179}  # retrieved manually from IJ
         scale_arr = self.img_array[0][colour_bar['y0']:colour_bar['y1'],
@@ -93,11 +113,19 @@ class Data:
         # 1D array of values matching colour profile (velocity or modulus)
         self.real_values = np.linspace(self.max_scale, 0, self.colour_profile.shape[0])
 
-    def analyse_roi(self, rois):
-        """Calculate stat parameter of interest for ROIs of each frame"""
-        self.get_colour_scale()
-        indices = utils.closest_rgb(rois, self.colour_profile)
+    def analyse_roi(self):
+        """
+        Calculate stat parameter of interest for ROIs of each frame
+        Args:
+            rois: image sub-array for region of interest
+        Returns:
+        """
+        self.get_rois()
+        self.set_colour_scale()
+        filter_mask = self.void_filter()
+        indices = utils.closest_rgb(self.rois, self.colour_profile)
         self.mapped_values = self.real_values[indices]
+        self.filtered_values = np.where(filter_mask, self.mapped_values, np.nan)
         self.gen_results()
 
     def gen_results(self):
@@ -110,15 +138,71 @@ class Data:
              'stats': {}}
         for target_var in target_vars:
             if target_var == self.source_var:
-                d['raw'][target_var] = self.mapped_values
+                d['raw'][target_var] = self.filtered_values
             else:
-                d['raw'][target_var] = utils.convert_swe(self.mapped_values,
+                d['raw'][target_var] = utils.convert_swe(self.filtered_values,
                                                          self.source_var,
                                                          target_var)
-
-            d['stats']['_'.join((target_var, 'median'))] = np.median(d['raw'][target_var], axis=(1, 2))
-            d['stats']['_'.join((target_var, 'mean'))] = d['raw'][target_var].mean(axis=(1, 2))
+            filtered = d['raw'][target_var]
+            d['stats']['_'.join((target_var, 'median'))] = np.nanmedian(filtered, axis=(1, 2))
+            d['stats']['_'.join((target_var, 'mean'))] = np.nanmean(filtered, axis=(1, 2))
         self.results = d
-        self.mean = self.mapped_values.mean()
-        self.median = np.median(self.mapped_values)
-        # data['ROI area'] = np.full((12,), utils.get_area(self.roi_coords))
+        self.mean = np.nanmean(self.filtered_values)
+        self.median = np.nanmedian(self.filtered_values)
+
+
+if __name__ == '__main__':
+    from pathlib import Path
+
+    cloud_path = Path('/Users/olivier/Library/CloudStorage/OneDrive-nih.no')
+    dir_path = cloud_path / 'FileExchange/BSc_2022/Opp6/Ultralyd/PAT00006/STU00001/SER00001'
+    file_path = dir_path / 'C0000004'
+
+    data = Data(file_path)
+    data.swe_fhz = 1
+    data.max_scale = 1200
+    data.load_dicom()
+    data.resample(data.swe_fhz)
+    data.analyse_roi()
+
+    def void_filter():
+        """Create mask of void pixels in image array
+        Args:
+            img_roi: 3D image array with RGB channels in 3rd dimension
+            threshold (int): user defined threshold of cumulative difference between channels
+        Returns: mask of void pixels
+        """
+        # assign threshold to max value (3*255) if it is None
+        threshold = data.void_threshold if isinstance(data.void_threshold, int) else 765
+        arr = np.copy(data.rois)
+        # NB: important to convert channel values to float before calculations
+        r = arr[:, :, :, 0].astype(np.float32)
+        g = arr[:, :, :, 1].astype(np.float32)
+        b = arr[:, :, :, 2].astype(np.float32)
+        rg_diff = np.abs(np.subtract(r, g))
+        rb_diff = np.abs(np.subtract(r, b))
+        gb_diff = np.abs(np.subtract(g, b))
+        cumulated_diff = rg_diff + rb_diff + gb_diff
+        void_mask = cumulated_diff > threshold
+        return void_mask
+
+    # ANALYSE ROI ##################
+    data.get_rois()
+    data.set_colour_scale()
+
+    filter_mask = void_filter()
+    test_rois = np.copy(data.rois)
+
+    indices = utils.closest_rgb(test_rois, data.colour_profile)
+
+    data.mapped_values = data.real_values[indices]
+
+    # data.filtered_values = ma.masked_array(data.mapped_values, mask=filter_mask)
+    test = np.where(filter_mask, data.mapped_values, np.nan)
+    mean1 = data.mapped_values.mean()
+    mean2 = np.nanmean(test)
+    median2 = np.nanmedian(test)
+
+    mean3 = np.nanmean(test, axis=(1, 2))
+    median3 = np.nanmedian(test, axis=(1, 2))
+

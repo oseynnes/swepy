@@ -163,6 +163,7 @@ class FigPanel(ttk.Frame):
         """Reset widgets to plot new data
         Args:
             D: data 3D array of shape (n frames, height, width).
+            swe_var: variable to calculate, can only be either 'velocity', 'shear_m' or 'youngs_m'
         Returns: None
         """
         for widget in self.lf0.winfo_children():
@@ -178,10 +179,14 @@ class FigPanel(ttk.Frame):
         figure_canvas = FigureCanvasTkAgg(figure, self.lf0)
         NavigationToolbar2Tk(figure_canvas, self.lf0)
         axes = figure.add_subplot()
-
-        if np.mean(D) > 0:
-            vp = axes.violinplot(plot_data.tolist(), widths=1,
-                                 showmeans=True, showmedians=True, showextrema=False)
+        if np.nanmean(D) > 0:
+            data_lists = [x for x in plot_data.tolist()]
+            filtered_lists = utils.filter_nans(data_lists)
+            vp = axes.violinplot(filtered_lists,
+                                 widths=1,
+                                 showmeans=True,
+                                 showmedians=True,
+                                 showextrema=False)
 
             for body in vp['bodies']:
                 body.set_facecolor('#D43F3A')
@@ -191,7 +196,7 @@ class FigPanel(ttk.Frame):
             vp['cmeans'].set_color('#473535')
             vp['cmedians'].set_color('white')
 
-            std = np.std(D, axis=(1, 2))
+            std = np.nanstd(D, axis=(1, 2))
             xy = [[l.vertices[:, 0].mean(), l.vertices[0, 1]] for l in vp['cmeans'].get_paths()]
             xy = np.array(xy)
             axes.vlines(xy[:, 0],
@@ -204,12 +209,78 @@ class FigPanel(ttk.Frame):
             axes.set_xlabel('SWE frames')
             axes.set_ylabel(self.y_labels[swe_var])
             axes.set_title(f"{self.output.results['file'][0]}, "
-                           f"Median: {int(np.median(D))}, "
-                           f"Mean: {int(D.mean())}, "
-                           f"STD: {int(np.std(D))}")
+                           f"Median: {int(np.nanmedian(D))}, "
+                           f"Mean: {int(np.nanmean(D))}, "
+                           f"STD: {int(np.nanstd(D))}")
 
         figure_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
     def clear_figure(self):
         for widget in self.lf0.winfo_children():
             widget.destroy()
+
+
+if __name__ == '__main__':
+    from pathlib import Path
+    from main import Output
+
+    path = Path('src/cache/C0000008.pickle')
+    results = utils.load_pickle(path)
+
+    root = tk.Tk()
+    output = Output(root)
+    output.results = results
+    fig = output.fig_panel
+
+    # CHANGE PLOT #############
+    fig.change_variable()
+    D = fig.output.results['raw'][fig.var]
+    ###########################
+
+    # REPLOT ##################
+    swe_vars = ['velocity', 'shear_m', 'youngs_m']
+    assert (fig.var in swe_vars), "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
+    fig.label_var.set(fig.var)
+    fig.change_variable()
+    frame_dim = D.shape[0]
+    plot_data = D.reshape(frame_dim, -1)
+
+    figure = Figure(figsize=(6, 4), dpi=100)
+    figure_canvas = FigureCanvasTkAgg(figure, fig.lf0)
+    NavigationToolbar2Tk(figure_canvas, fig.lf0)
+    axes = figure.add_subplot()
+    if np.nanmean(D) > 0:
+        print(f'Attempt to plot: {plot_data.shape}')
+        print(f'np.isnan? {np.isnan(np.sum(plot_data))}')
+        test = [x for x in plot_data.tolist()]
+        test = utils.filter_nans(test)
+        vp = axes.violinplot(test, widths=1,
+                             showmeans=True, showmedians=True, showextrema=False)
+
+        for body in vp['bodies']:
+            body.set_facecolor('#D43F3A')
+            body.set_alpha(1)
+            body.set_edgecolor('#473535')
+
+        vp['cmeans'].set_color('#473535')
+        vp['cmedians'].set_color('white')
+
+        std = np.nanstd(D, axis=(1, 2))
+        xy = [[l.vertices[:, 0].mean(), l.vertices[0, 1]] for l in vp['cmeans'].get_paths()]
+        xy = np.array(xy)
+        axes.vlines(xy[:, 0],
+                    ymin=xy[:, 1] - std,
+                    ymax=xy[:, 1] + std,
+                    color='#473535',
+                    lw=3,
+                    zorder=1)
+
+        axes.set_xlabel('SWE frames')
+        axes.set_ylabel(fig.y_labels[fig.var])
+        print(f"Title: {output.results['file'][0]}")
+        axes.set_title(f"{output.results['file'][0]}, "
+                       f"Median: {int(np.nanmedian(D))}, "
+                       f"Mean: {int(np.nanmean(D))}, "
+                        f"STD: {int(np.nanstd(D))}")
+    ###########################
+    root.mainloop()

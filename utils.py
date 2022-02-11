@@ -241,7 +241,7 @@ def convert_velocity(velocity, to_unit, decimals=4, rho=1000):
 def convert_swe(value, swe_var, to_unit, decimals=4, rho=1000):
     """convert variable measured from shear wave elastography
     Args:
-        value (float): value
+        value: value
         swe_var (str): variable to convert from. "velocity, "shear_m" or "youngs_m"
         to_unit (str): variable to convert to. "velocity, "shear_m" or "youngs_m"
         decimals (int): number of decimals to round to
@@ -270,3 +270,14 @@ def get_area(coords):
 def callback(url):
     """open webpage"""
     webbrowser.open_new(url)
+
+
+def filter_nans(lists):
+    """Filter nan values out of nested lists
+    Args:
+        lists: nested lists
+    Returns: nested lists without nan values
+    """
+    filtered = [list(filter(lambda x: x == x, inner_list)) for inner_list in lists]
+    return filtered
+
