@@ -90,7 +90,7 @@ class ImgPanel(ttk.Frame):
 
         self.n_frames = 0
         self.roi_coords = None
-        self.rect1 = self.rect2 = self.start_x = self.start_y = None
+        self.polyg1 = self.polyg2 = self.start_x = self.start_y = None
         self.x = self.y = 0
         self.fov_coords = {'x0': 0,
                            'y0': 0,
@@ -128,31 +128,36 @@ class ImgPanel(ttk.Frame):
                            self.roi_coords['y1'])
 
     def draw_rois(self, x1, y1, x2, y2):
-        if self.rect1:
+        if self.polyg1:
             self.del_rois()
-        self.rect1 = self.canvas.create_rectangle(x1, y1, x2, y2, outline='red')
-        self.rect2 = self.canvas.create_rectangle(x1, y1 + 225, x2, y2 + 225, outline='red')
+        self.polyg1 = self.canvas.create_rectangle(x1, y1, x2, y2, outline='red')
+        self.polyg2 = self.canvas.create_rectangle(x1, y1 + 225, x2, y2 + 225, outline='red')
 
     def del_rois(self):
-        self.canvas.delete(self.rect1, self.rect2)
+        self.canvas.delete(self.polyg1, self.polyg2)
 
     def on_button_press(self, event):
         # save mouse drag start position
         self.start_x = self.canvas.canvasx(event.x)
         self.start_y = self.canvas.canvasy(event.y)
-        if not self.rect1:
+        if not self.polyg1:
             self.draw_rois(self.x, self.y, 1, 1)
 
     def on_move_press(self, event):
         # expand rectangle as you drag the mouse
-        if self.isin_fov():
-            cur_x, cur_y = (event.x, event.y)
-            self.canvas.coords(self.rect1, self.start_x, self.start_y, cur_x, cur_y)
-            self.canvas.coords(self.rect2, self.start_x, self.start_y + 225, cur_x, cur_y + 225)
+        cur_x, cur_y = (event.x, event.y)
+        self.roi_offset = 225 if self.isin_fov() else -225
+        self.canvas.coords(self.polyg1, self.start_x, self.start_y, cur_x, cur_y)
+        self.canvas.coords(self.polyg2,
+                           self.start_x,
+                           self.start_y + self.roi_offset,
+                           cur_x,
+                           cur_y + self.roi_offset)
+        self.points = self.polyg1 if self.isin_fov() else self.polyg2
 
     def on_button_release(self, event):
         keys = ('x0', 'y0', 'x1', 'y1')
-        self.roi_coords = dict(zip(keys, self.canvas.coords(self.rect1)))
+        self.roi_coords = dict(zip(keys, self.canvas.coords(self.points)))
         self.roi_coords = {k: int(v) for k, v in self.roi_coords.items()}
 
 
@@ -230,3 +235,90 @@ class DisplayControls(ttk.Frame):
         if int(self.current_value.get()) < self.img_panel.n_frames - 1:
             self.current_frame += 1
             self.update_frame()
+
+
+if __name__ == '__main__':
+
+    class Draw(ttk.Frame):
+        def __init__(self, parent):
+            super().__init__(parent)
+
+            self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
+            self.canvas.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
+            self.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
+            self.columnconfigure(1, weight=4)
+            self.rowconfigure(1, weight=4)
+
+            self.roi_coords = None
+            self.polyg1 = self.polyg2 = self.start_x = self.start_y = None
+            self.x = self.y = 0
+            self.fov_coords = {'x0': 0,
+                               'y0': 0,
+                               'x1': int(self.canvas['width']),
+                               'y1': int(self.canvas['height']) / 2}
+
+            self.current_array = None
+            self.img = None
+            self.img_name = None
+
+        def activate_draw(self):
+            self.canvas.bind('<Button-1>', self.on_button_press)
+            self.canvas.bind('<B1-Motion>', self.on_move_press)
+            self.canvas.bind('<ButtonRelease-1>', self.on_button_release)
+
+        def isin_fov(self):
+            in_x_bounds = self.fov_coords['x0'] <= self.start_x <= self.fov_coords['x1']
+            in_y_bounds = self.fov_coords['y0'] <= self.start_y <= self.fov_coords['y1']
+            return in_x_bounds and in_y_bounds
+
+        def set_rois(self):
+            if self.roi_coords:
+                self.draw_rois(self.roi_coords['x0'],
+                               self.roi_coords['y0'],
+                               self.roi_coords['x1'],
+                               self.roi_coords['y1'])
+
+        def draw_rois(self, x1, y1, x2, y2):
+            if self.polyg1:
+                self.del_rois()
+            self.polyg1 = self.canvas.create_rectangle(x1, y1, x2, y2, outline='red')
+            self.polyg2 = self.canvas.create_rectangle(x1, y1 + 225, x2, y2 + 225, outline='red')
+
+        def del_rois(self):
+            self.canvas.delete(self.polyg1, self.polyg2)
+
+        def on_button_press(self, event):
+            # save mouse drag start position
+            self.start_x = self.canvas.canvasx(event.x)
+            self.start_y = self.canvas.canvasy(event.y)
+            if not self.polyg1:
+                self.draw_rois(self.x, self.y, 1, 1)
+
+        def on_move_press(self, event):
+            cur_x, cur_y = (event.x, event.y)
+            self.roi_offset = 225 if self.isin_fov() else -225
+            self.canvas.coords(self.polyg1, self.start_x, self.start_y, cur_x, cur_y)
+            self.canvas.coords(self.polyg2,
+                               self.start_x,
+                               self.start_y + self.roi_offset,
+                               cur_x,
+                               cur_y + self.roi_offset)
+            self.points = self.polyg1 if self.isin_fov() else self.polyg2
+
+        def on_button_release(self, event):
+            keys = ('x0', 'y0', 'x1', 'y1')
+            self.roi_coords = dict(zip(keys, self.canvas.coords(self.points)))
+            self.roi_coords = {k: int(v) for k, v in self.roi_coords.items()}
+            print(f'ROI coords: {self.roi_coords}')
+
+
+    class App(tk.Tk):
+        def __init__(self):
+            super().__init__()
+            self.geometry('800x600')
+
+
+    app = App()
+    draw = Draw(app)
+    draw.activate_draw()
+    app.mainloop()
