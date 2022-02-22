@@ -165,6 +165,7 @@ class ImgPanel(ttk.Frame):
 
     def get_top_coords(self):
         self.roi_coords = self.roi_coords if self.isin_top_fov() else self.mirror_coords()
+        self.new_roi.set(True)
 
     def set_rois(self):
         if self.roi_coords:
@@ -185,7 +186,7 @@ class ImgPanel(ttk.Frame):
                                                    outline='green',
                                                    width=2)
         self.get_top_coords()
-        self.new_roi.set(True)
+        # self.new_roi.set(True)
 
     def draw_polygon(self):
         if len(self.roi_coords) == 2:
@@ -208,7 +209,7 @@ class ImgPanel(ttk.Frame):
     def on_double_click(self, event):
         # code to save coordinates
         self.get_top_coords()
-        self.new_roi.set(True)
+        # self.new_roi.set(True)
 
     def on_button_press(self, event):
         if self.new_roi.get():

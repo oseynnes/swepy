@@ -152,6 +152,7 @@ class Controller:
             return
         self.data.swe_fhz = self.view.swe_fhz
         self.data.max_scale = self.view.max_scale
+        self.view.img_panel.get_top_coords()
         self.data.roi_coords = self.view.img_panel.roi_coords
         self.data.analyse_roi()
         self.output.results = self.data.results
