@@ -89,13 +89,15 @@ class ImgPanel(ttk.Frame):
         self.rowconfigure(1, weight=4)
 
         self.n_frames = 0
-        self.roi_coords = None
-        self.polyg1 = self.polyg2 = self.start_x = self.start_y = None
-        self.x = self.y = 0
-        self.fov_coords = {'x0': 0,
-                           'y0': 0,
-                           'x1': int(self.canvas['width']),
-                           'y1': int(self.canvas['height']) / 2}
+        self.top_fov_coords = {'x0': 0,
+                               'y0': 0,
+                               'x1': int(self.canvas['width']),
+                               'y1': int(self.canvas['height']) / 2}
+
+        self.new_roi = tk.BooleanVar()
+        self.new_roi.set(True)
+        self.roi_coords = []
+        self.polyg1 = self.polyg2 = None
 
         self.current_array = None
         self.img = None
@@ -104,10 +106,31 @@ class ImgPanel(ttk.Frame):
         self.ctrl = DisplayControls(self)
         self.frame_label_var = tk.StringVar()
 
+        # radio buttons
+        self.btn_frame = ttk.LabelFrame(self, text='ROI shape')
+        self.shape = tk.StringVar()
+        self.shape.set('rectangle')
+
+        ttk.Radiobutton(
+            self.btn_frame,
+            text='Rectangle',
+            value='rectangle',
+            variable=self.shape,
+            command=self.del_rois).grid(column=0, row=0, padx=5, pady=5)
+
+        ttk.Radiobutton(
+            self.btn_frame,
+            text='Polygon',
+            value='polygon',
+            variable=self.shape,
+            command=self.del_rois).grid(column=1, row=0, padx=5, pady=5)
+
+        self.btn_frame.grid(column=1, row=4, padx=5, pady=5, sticky='ew')
+
     def activate_draw(self):
         self.canvas.bind('<Button-1>', self.on_button_press)
-        self.canvas.bind('<B1-Motion>', self.on_move_press)
-        self.canvas.bind('<ButtonRelease-1>', self.on_button_release)
+        if self.shape.get() == 'polygon':
+            self.canvas.bind("<Double-1>", self.on_double_click)
 
     def activate_slider(self, n_frames):
         self.n_frames = n_frames
@@ -115,50 +138,97 @@ class ImgPanel(ttk.Frame):
         self.ctrl.slider.config(to=self.n_frames)
         self.ctrl.slider.config(state='normal')  # activate slider
 
-    def isin_fov(self):
-        in_x_bounds = self.fov_coords['x0'] <= self.start_x <= self.fov_coords['x1']
-        in_y_bounds = self.fov_coords['y0'] <= self.start_y <= self.fov_coords['y1']
+    def clear_coords(self):
+        self.roi_coords = []
+
+    def isin_top_fov(self):
+        x_start, y_start = self.roi_coords[0]
+        in_x_bounds = self.top_fov_coords['x0'] <= x_start <= self.top_fov_coords['x1']
+        in_y_bounds = self.top_fov_coords['y0'] <= y_start <= self.top_fov_coords['y1']
         return in_x_bounds and in_y_bounds
+
+    def mirror_coords(self, coords=None):
+        roi_coords = self.roi_coords if not coords else coords
+        roi_offset = 225 if self.isin_top_fov() else -225
+        if isinstance(roi_coords[0], tuple):
+            m_coords = [(coord[0], coord[1] + roi_offset) for coord in roi_coords]
+        elif isinstance(roi_coords[0], int):
+            m_coords = [c if not i % 2 else c + roi_offset for i, c in enumerate(roi_coords)]
+        else:
+            raise Exception('Error due to format of ROI coordinates')
+        return m_coords
+
+    def del_rois(self):
+        self.clear_coords()
+        self.canvas.delete(self.polyg1, self.polyg2)
+        self.activate_draw()
+
+    def get_top_coords(self):
+        self.roi_coords = self.roi_coords if self.isin_top_fov() else self.mirror_coords()
 
     def set_rois(self):
         if self.roi_coords:
-            self.draw_rois(self.roi_coords['x0'],
-                           self.roi_coords['y0'],
-                           self.roi_coords['x1'],
-                           self.roi_coords['y1'])
+            self.draw_rois()
 
-    def draw_rois(self, x1, y1, x2, y2):
-        if self.polyg1:
-            self.del_rois()
-        self.polyg1 = self.canvas.create_rectangle(x1, y1, x2, y2, outline='red')
-        self.polyg2 = self.canvas.create_rectangle(x1, y1 + 225, x2, y2 + 225, outline='red')
-
-    def del_rois(self):
+    def draw_rois(self):
         self.canvas.delete(self.polyg1, self.polyg2)
+        if self.shape.get() == 'rectangle':
+            self.draw_rectangle()
+        elif self.shape.get() == 'polygon':
+            self.draw_polygon()
+
+    def draw_rectangle(self):
+        self.polyg1 = self.canvas.create_rectangle(self.roi_coords,
+                                                   outline='green',
+                                                   width=2)
+        self.polyg2 = self.canvas.create_rectangle(*self.mirror_coords(),
+                                                   outline='green',
+                                                   width=2)
+        self.get_top_coords()
+        self.new_roi.set(True)
+
+    def draw_polygon(self):
+        if len(self.roi_coords) == 2:
+            self.polyg1 = self.canvas.create_line(self.roi_coords,
+                                                  fill='green',
+                                                  width=2)
+            self.polyg2 = self.canvas.create_line(self.mirror_coords(),
+                                                  fill='green',
+                                                  width=2)
+        elif len(self.roi_coords) > 2:
+            self.polyg1 = self.canvas.create_polygon(self.roi_coords,
+                                                     fill='',
+                                                     outline='green',
+                                                     width=2)
+            self.polyg2 = self.canvas.create_polygon(self.mirror_coords(),
+                                                     fill='',
+                                                     outline='green',
+                                                     width=2)
+
+    def on_double_click(self, event):
+        # code to save coordinates
+        self.get_top_coords()
+        self.new_roi.set(True)
 
     def on_button_press(self, event):
-        # save mouse drag start position
-        self.start_x = self.canvas.canvasx(event.x)
-        self.start_y = self.canvas.canvasy(event.y)
-        if not self.polyg1:
-            self.draw_rois(self.x, self.y, 1, 1)
-
-    def on_move_press(self, event):
-        # expand rectangle as you drag the mouse
-        cur_x, cur_y = (event.x, event.y)
-        self.roi_offset = 225 if self.isin_fov() else -225
-        self.canvas.coords(self.polyg1, self.start_x, self.start_y, cur_x, cur_y)
-        self.canvas.coords(self.polyg2,
-                           self.start_x,
-                           self.start_y + self.roi_offset,
-                           cur_x,
-                           cur_y + self.roi_offset)
-        self.points = self.polyg1 if self.isin_fov() else self.polyg2
-
-    def on_button_release(self, event):
-        keys = ('x0', 'y0', 'x1', 'y1')
-        self.roi_coords = dict(zip(keys, self.canvas.coords(self.points)))
-        self.roi_coords = {k: int(v) for k, v in self.roi_coords.items()}
+        if self.new_roi.get():
+            self.del_rois()
+        self.new_roi.set(False)
+        x, y = event.x, event.y
+        self.roi_coords.append((x, y))
+        self.canvas.delete(self.polyg1, self.polyg2)
+        if len(self.roi_coords) == 1:
+            pt_coords = (x - 1, y - 1, x + 1, y + 1)
+            self.polyg1 = self.canvas.create_oval(pt_coords,
+                                                  fill='green',
+                                                  outline='green',
+                                                  width=5)
+            self.polyg2 = self.canvas.create_oval(self.mirror_coords(pt_coords),
+                                                  fill='green',
+                                                  outline='green',
+                                                  width=5)
+        else:
+            self.draw_rois()
 
 
 class DisplayControls(ttk.Frame):
@@ -169,7 +239,7 @@ class DisplayControls(ttk.Frame):
 
         self.img_panel = parent
 
-        self.grid(row=4, column=1, sticky=tk.EW)
+        self.grid(row=5, column=1, sticky=tk.EW)
 
         self.current_frame = 0
 
@@ -235,90 +305,3 @@ class DisplayControls(ttk.Frame):
         if int(self.current_value.get()) < self.img_panel.n_frames - 1:
             self.current_frame += 1
             self.update_frame()
-
-
-if __name__ == '__main__':
-
-    class Draw(ttk.Frame):
-        def __init__(self, parent):
-            super().__init__(parent)
-
-            self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
-            self.canvas.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
-            self.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
-            self.columnconfigure(1, weight=4)
-            self.rowconfigure(1, weight=4)
-
-            self.roi_coords = None
-            self.polyg1 = self.polyg2 = self.start_x = self.start_y = None
-            self.x = self.y = 0
-            self.fov_coords = {'x0': 0,
-                               'y0': 0,
-                               'x1': int(self.canvas['width']),
-                               'y1': int(self.canvas['height']) / 2}
-
-            self.current_array = None
-            self.img = None
-            self.img_name = None
-
-        def activate_draw(self):
-            self.canvas.bind('<Button-1>', self.on_button_press)
-            self.canvas.bind('<B1-Motion>', self.on_move_press)
-            self.canvas.bind('<ButtonRelease-1>', self.on_button_release)
-
-        def isin_fov(self):
-            in_x_bounds = self.fov_coords['x0'] <= self.start_x <= self.fov_coords['x1']
-            in_y_bounds = self.fov_coords['y0'] <= self.start_y <= self.fov_coords['y1']
-            return in_x_bounds and in_y_bounds
-
-        def set_rois(self):
-            if self.roi_coords:
-                self.draw_rois(self.roi_coords['x0'],
-                               self.roi_coords['y0'],
-                               self.roi_coords['x1'],
-                               self.roi_coords['y1'])
-
-        def draw_rois(self, x1, y1, x2, y2):
-            if self.polyg1:
-                self.del_rois()
-            self.polyg1 = self.canvas.create_rectangle(x1, y1, x2, y2, outline='red')
-            self.polyg2 = self.canvas.create_rectangle(x1, y1 + 225, x2, y2 + 225, outline='red')
-
-        def del_rois(self):
-            self.canvas.delete(self.polyg1, self.polyg2)
-
-        def on_button_press(self, event):
-            # save mouse drag start position
-            self.start_x = self.canvas.canvasx(event.x)
-            self.start_y = self.canvas.canvasy(event.y)
-            if not self.polyg1:
-                self.draw_rois(self.x, self.y, 1, 1)
-
-        def on_move_press(self, event):
-            cur_x, cur_y = (event.x, event.y)
-            self.roi_offset = 225 if self.isin_fov() else -225
-            self.canvas.coords(self.polyg1, self.start_x, self.start_y, cur_x, cur_y)
-            self.canvas.coords(self.polyg2,
-                               self.start_x,
-                               self.start_y + self.roi_offset,
-                               cur_x,
-                               cur_y + self.roi_offset)
-            self.points = self.polyg1 if self.isin_fov() else self.polyg2
-
-        def on_button_release(self, event):
-            keys = ('x0', 'y0', 'x1', 'y1')
-            self.roi_coords = dict(zip(keys, self.canvas.coords(self.points)))
-            self.roi_coords = {k: int(v) for k, v in self.roi_coords.items()}
-            print(f'ROI coords: {self.roi_coords}')
-
-
-    class App(tk.Tk):
-        def __init__(self):
-            super().__init__()
-            self.geometry('800x600')
-
-
-    app = App()
-    draw = Draw(app)
-    draw.activate_draw()
-    app.mainloop()

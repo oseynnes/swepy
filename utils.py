@@ -168,6 +168,27 @@ def log_entry(name, string_var, ttk_table, row_id, var_type=float):
     return value
 
 
+# def closest_rgb(roi_rgb, color_profile_rgb):
+#     """
+#     Get indices of closest RGB values from scale to input RGB value
+#     Args:
+#         roi_rgb: region of interest array
+#         color_profile_rgb: color scale array
+#     Returns: array of scale_height indices
+#     """
+#     if len(roi_rgb.shape) == 3:
+#         roi_rgb = roi_rgb[np.newaxis, :, :, np.newaxis, :]
+#     elif len(roi_rgb.shape) == 4:
+#         roi_rgb = roi_rgb[:, :, :, np.newaxis, :]
+#     else:
+#         raise ValueError(f'ROI shape: {roi_rgb.shape}. Must have 3 or 4 dimensions')
+#     assert len(color_profile_rgb.shape) == 2, 'Color scale array must be two-dimensional (H, 3)'
+#     rgb_distances = np.sqrt(np.sum((roi_rgb - color_profile_rgb) ** 2, axis=-1))
+#     # indices of closest corresponding RGB value in color bar
+#     min_indices = rgb_distances.argmin(-1)
+#     return min_indices
+
+
 def closest_rgb(roi_rgb, color_profile_rgb):
     """
     Get indices of closest RGB values from scale to input RGB value
@@ -177,11 +198,11 @@ def closest_rgb(roi_rgb, color_profile_rgb):
     Returns: array of scale_height indices
     """
     if len(roi_rgb.shape) == 3:
-        roi_rgb = roi_rgb[np.newaxis, :, :, np.newaxis, :]
-    elif len(roi_rgb.shape) == 4:
-        roi_rgb = roi_rgb[:, :, :, np.newaxis, :]
+        roi_rgb = roi_rgb[:, :, np.newaxis, :]
+    elif len(roi_rgb.shape) == 2:
+        roi_rgb = roi_rgb[np.newaxis, np.newaxis, :]
     else:
-        raise ValueError(f'ROI shape: {roi_rgb.shape}. Must have 3 or 4 dimensions')
+        raise ValueError(f'ROI shape: {roi_rgb.shape}. Must have 2 or 3 dimensions')
     assert len(color_profile_rgb.shape) == 2, 'Color scale array must be two-dimensional (H, 3)'
     rgb_distances = np.sqrt(np.sum((roi_rgb - color_profile_rgb) ** 2, axis=-1))
     # indices of closest corresponding RGB value in color bar
@@ -281,3 +302,15 @@ def filter_nans(lists):
     filtered = [list(filter(lambda x: x == x, inner_list)) for inner_list in lists]
     return filtered
 
+
+def rect_polygonise(rect_coord):
+    """Generate a list of coordinates for all points of a rectangular selection
+    Args:
+        rect_coord: list of 2 (x, y) coordinates to define rectangle
+    Returns: list of all 4 (x, y) coordinates
+    """
+    x0 = rect_coord[0][0]
+    y0 = rect_coord[0][1]
+    x1 = rect_coord[1][0]
+    y1 = rect_coord[1][1]
+    return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]

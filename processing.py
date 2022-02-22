@@ -1,7 +1,7 @@
 import numpy as np
-import numpy.ma as ma
 from pydicom import dcmread
 from pydicom.pixel_data_handlers.util import convert_color_space
+from skimage.draw import polygon
 
 import utils
 
@@ -42,10 +42,8 @@ class Data:
     @staticmethod
     def get_roi_coord(dataset_obj):
         """return upper right and lower left coordinates of rectangle region of interest"""
-        coords = {'x0': dataset_obj.RegionLocationMinX0,
-                  'y0': dataset_obj.RegionLocationMinY0,
-                  'x1': dataset_obj.RegionLocationMaxX1,
-                  'y1': dataset_obj.RegionLocationMaxY1}
+        coords = [(dataset_obj.RegionLocationMinX0, dataset_obj.RegionLocationMinY0),
+                  (dataset_obj.RegionLocationMaxX1, dataset_obj.RegionLocationMaxY1)]
         return coords
 
     def load_dicom(self):
@@ -72,10 +70,13 @@ class Data:
 
     def get_rois(self):
         """Index sub-array of unique SWE frames at SWE ROI coordinates"""
-        self.rois = self.swe_array[:,
-                    self.roi_coords['y0']:self.roi_coords['y1'],
-                    self.roi_coords['x0']:self.roi_coords['x1'],
-                    :]
+        if len(self.roi_coords) > 2:
+            coords = self.roi_coords
+        else:
+            coords = utils.rect_polygonise(self.roi_coords)
+        coords_arr = np.asarray(coords)
+        rr, cc = polygon(coords_arr[:, 0], coords_arr[:, 1])
+        self.rois = self.swe_array[:, cc, rr, :]
 
     def void_filter(self):
         """Create mask of void pixels in image array
@@ -88,9 +89,9 @@ class Data:
         threshold = self.void_threshold if isinstance(self.void_threshold, int) else 765
         arr = np.copy(self.rois)
         # NB: important to convert channel values to float before calculations
-        r = arr[:, :, :, 0].astype(np.float32)
-        g = arr[:, :, :, 1].astype(np.float32)
-        b = arr[:, :, :, 2].astype(np.float32)
+        r = arr[:, :, 0].astype(np.float32)
+        g = arr[:, :, 1].astype(np.float32)
+        b = arr[:, :, 2].astype(np.float32)
         rg_diff = np.abs(np.subtract(r, g))
         rb_diff = np.abs(np.subtract(r, b))
         gb_diff = np.abs(np.subtract(g, b))
@@ -144,65 +145,8 @@ class Data:
                                                          self.source_var,
                                                          target_var)
             filtered = d['raw'][target_var]
-            d['stats']['_'.join((target_var, 'median'))] = np.nanmedian(filtered, axis=(1, 2))
-            d['stats']['_'.join((target_var, 'mean'))] = np.nanmean(filtered, axis=(1, 2))
+            d['stats']['_'.join((target_var, 'median'))] = np.nanmedian(filtered, axis=1)
+            d['stats']['_'.join((target_var, 'mean'))] = np.nanmean(filtered, axis=1)
         self.results = d
         self.mean = np.nanmean(self.filtered_values)
         self.median = np.nanmedian(self.filtered_values)
-
-
-if __name__ == '__main__':
-    from pathlib import Path
-
-    cloud_path = Path('/Users/olivier/Library/CloudStorage/OneDrive-nih.no')
-    dir_path = cloud_path / 'FileExchange/BSc_2022/Opp6/Ultralyd/PAT00006/STU00001/SER00001'
-    file_path = dir_path / 'C0000004'
-
-    data = Data(file_path)
-    data.swe_fhz = 1
-    data.max_scale = 1200
-    data.load_dicom()
-    data.resample(data.swe_fhz)
-    data.analyse_roi()
-
-    def void_filter():
-        """Create mask of void pixels in image array
-        Args:
-            img_roi: 3D image array with RGB channels in 3rd dimension
-            threshold (int): user defined threshold of cumulative difference between channels
-        Returns: mask of void pixels
-        """
-        # assign threshold to max value (3*255) if it is None
-        threshold = data.void_threshold if isinstance(data.void_threshold, int) else 765
-        arr = np.copy(data.rois)
-        # NB: important to convert channel values to float before calculations
-        r = arr[:, :, :, 0].astype(np.float32)
-        g = arr[:, :, :, 1].astype(np.float32)
-        b = arr[:, :, :, 2].astype(np.float32)
-        rg_diff = np.abs(np.subtract(r, g))
-        rb_diff = np.abs(np.subtract(r, b))
-        gb_diff = np.abs(np.subtract(g, b))
-        cumulated_diff = rg_diff + rb_diff + gb_diff
-        void_mask = cumulated_diff > threshold
-        return void_mask
-
-    # ANALYSE ROI ##################
-    data.get_rois()
-    data.set_colour_scale()
-
-    filter_mask = void_filter()
-    test_rois = np.copy(data.rois)
-
-    indices = utils.closest_rgb(test_rois, data.colour_profile)
-
-    data.mapped_values = data.real_values[indices]
-
-    # data.filtered_values = ma.masked_array(data.mapped_values, mask=filter_mask)
-    test = np.where(filter_mask, data.mapped_values, np.nan)
-    mean1 = data.mapped_values.mean()
-    mean2 = np.nanmean(test)
-    median2 = np.nanmedian(test)
-
-    mean3 = np.nanmean(test, axis=(1, 2))
-    median3 = np.nanmedian(test, axis=(1, 2))
-

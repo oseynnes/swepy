@@ -46,10 +46,10 @@ class View(ttk.Frame):
 
     def reset_rois(self):
         self.img_panel.roi_coords = self.init_roi_coords
+        self.img_panel.shape.set('rectangle')
         self.img_panel.set_rois()
 
     def analyse(self):
-
         if self.ds:
             self.controller.analyse()
             self.block.set(False)
