@@ -103,10 +103,11 @@ class ImgPanel(ttk.Frame):
         self.img = None
         self.img_name = None
 
+        # Video controls
         self.ctrl = DisplayControls(self)
         self.frame_label_var = tk.StringVar()
 
-        # radio buttons
+        # Choice of ROI shape
         self.btn_frame = ttk.LabelFrame(self, text='ROI shape')
         self.shape = tk.StringVar()
         self.shape.set('rectangle')
@@ -116,17 +117,18 @@ class ImgPanel(ttk.Frame):
             text='Rectangle',
             value='rectangle',
             variable=self.shape,
-            command=self.del_rois).grid(column=0, row=0, padx=5, pady=5)
+            command=self.reset_draw).grid(column=0, row=0, padx=5, pady=5)
 
         ttk.Radiobutton(
             self.btn_frame,
             text='Polygon',
             value='polygon',
             variable=self.shape,
-            command=self.del_rois).grid(column=1, row=0, padx=5, pady=5)
+            command=self.reset_draw).grid(column=1, row=0, padx=5, pady=5)
 
         self.btn_frame.grid(column=1, row=4, padx=5, pady=5, sticky='ew')
 
+    # Specific functions
     def activate_draw(self):
         self.canvas.bind('<Button-1>', self.on_button_press)
         if self.shape.get() == 'polygon':
@@ -142,12 +144,19 @@ class ImgPanel(ttk.Frame):
         self.roi_coords = []
 
     def isin_top_fov(self):
+        """Check if ROI is drawn in top or bottom field of view"""
         x_start, y_start = self.roi_coords[0]
         in_x_bounds = self.top_fov_coords['x0'] <= x_start <= self.top_fov_coords['x1']
         in_y_bounds = self.top_fov_coords['y0'] <= y_start <= self.top_fov_coords['y1']
         return in_x_bounds and in_y_bounds
 
     def mirror_coords(self, coords=None):
+        """Generate mirror coordinates of ROI in other field of view,
+        when FoVs are in "top-bottom" configuration
+        Args:
+            coords (list): (x, y) coordinates for polygon points
+        Returns: offset list of (x, y) coordinates
+        """
         roi_coords = self.roi_coords if not coords else coords
         roi_offset = 225 if self.isin_top_fov() else -225
         if isinstance(roi_coords[0], tuple):
@@ -158,12 +167,13 @@ class ImgPanel(ttk.Frame):
             raise Exception('Error due to format of ROI coordinates')
         return m_coords
 
-    def del_rois(self):
+    def reset_draw(self):
         self.clear_coords()
         self.canvas.delete(self.polyg1, self.polyg2)
         self.activate_draw()
 
     def get_top_coords(self):
+        """Set coordinates of ROI in top field of view as the main ones"""
         self.roi_coords = self.roi_coords if self.isin_top_fov() else self.mirror_coords()
         self.new_roi.set(True)
 
@@ -186,7 +196,6 @@ class ImgPanel(ttk.Frame):
                                                    outline='green',
                                                    width=2)
         self.get_top_coords()
-        # self.new_roi.set(True)
 
     def draw_polygon(self):
         if len(self.roi_coords) == 2:
@@ -207,13 +216,11 @@ class ImgPanel(ttk.Frame):
                                                      width=2)
 
     def on_double_click(self, event):
-        # code to save coordinates
         self.get_top_coords()
-        # self.new_roi.set(True)
 
     def on_button_press(self, event):
         if self.new_roi.get():
-            self.del_rois()
+            self.reset_draw()
         self.new_roi.set(False)
         x, y = event.x, event.y
         self.roi_coords.append((x, y))

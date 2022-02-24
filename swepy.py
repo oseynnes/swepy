@@ -183,7 +183,7 @@ class Output(ttk.Frame):
 
         self.previous = HistoryPanel(self)
         self.previous.load_btn['command'] = self.load_previous
-        self.previous.clear_all_btn['command'] = self.clear_all
+        self.previous.clear_all_btn['command'] = self.clear_results
 
         self.save_panel = SavePanel(self)
 
@@ -212,12 +212,12 @@ class Output(ttk.Frame):
             row = item['values']
             self.tv_selection.add(tuple(row))
         rows = list(self.tv_selection)
-        name = rows[0][0].split('.')[0]
+        name = rows[0][0]
         path = Path.cwd() / 'src' / 'cache' / f'{name}.pickle'
         self.results = utils.load_pickle(path)
         self.fig_panel.change_plot()
 
-    def clear_all(self):
+    def clear_results(self):
         self.files_panel.clear_treeview()
         self.fig_panel.clear_figure()
         utils.clear_pickle()
@@ -225,7 +225,8 @@ class Output(ttk.Frame):
     def load_previous(self):
         """Load cached results from previous analyses"""
         paths = self.previous.select_cached()
-        self.files_panel.load_tv_from_pickle(paths)
+        if paths:
+            self.files_panel.load_tv_from_pickle(paths)
 
 
 class App(tk.Tk):

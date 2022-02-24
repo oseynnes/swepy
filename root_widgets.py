@@ -30,7 +30,7 @@ class MenuBar(tk.Menu):
         self.file_menu.add_command(label='Export to Excel',
                                    command=lambda: self.app.output.save_panel.export('xlsx'))
         self.file_menu.add_separator()
-        self.file_menu.add_command(label='Clear all results', command=lambda: self.app.output.clear_all())
+        self.file_menu.add_command(label='Clear all results', command=lambda: self.app.output.clear_results())
         self.file_menu.add_command(label='Quit', command=quit)
 
         self.help_menu = tk.Menu(self, tearoff=0)
