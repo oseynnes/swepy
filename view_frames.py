@@ -42,7 +42,7 @@ class LeftPanel(ttk.Frame):
         self.scale_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_scale)
         self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5)
 
-        self.usr_params = utils.load_settings('SWE_PARAM')
+        self.usr_params = utils.get_settings('SWE_PARAM')
         if self.usr_params:
             self.usr_fhz.set(self.usr_params[0])
             self.usr_scale.set(self.usr_params[1])

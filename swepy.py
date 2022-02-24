@@ -268,7 +268,6 @@ class App(tk.Tk):
             path: pathlib path to dicom file
         Returns: None
         """
-
         if path:
             self.path = path
             self.nb.forget(self.view)

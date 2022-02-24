@@ -68,17 +68,45 @@ def clear_pickle():
         path.unlink()
 
 
-def load_settings(param):
+def settings_io(temp=None):
     """Load settings from previous analyses"""
     dir_path = Path.cwd() / 'src' / 'cache'
     json_path = dir_path / 'settings.json'
 
-    if json_path.exists():
-        temp = load_json(json_path)
-        if param in temp:
-            return temp[param]
+    if temp:
+        save_json(temp, json_path)
+    else:
+        if json_path.exists():
+            temp = load_json(json_path)
+            return temp
+            # if param in temp:
+            #     return temp[param]
+        else:
+            return {}
+
+
+def get_settings(param):
+    """Load a parameter settings from previous analyses"""
+    temp = settings_io()
+    if param in temp:
+        return temp[param]
     else:
         return []
+
+
+def delete_settings(param=None):
+    """Delete a parameter settings or all settings from previous analyses
+    Args:
+        param: parameter for which settings should be deleted
+    Returns: None
+    """
+    temp = settings_io()
+    if param:
+        temp[param].clear()
+    else:
+        for parameter in temp.values:
+            parameter.clear()
+    settings_io(temp)
 
 
 def save_path(path):
@@ -166,27 +194,6 @@ def log_entry(name, string_var, ttk_table, row_id, var_type=float):
                          values=(name, value))
     string_var.set('')
     return value
-
-
-# def closest_rgb(roi_rgb, color_profile_rgb):
-#     """
-#     Get indices of closest RGB values from scale to input RGB value
-#     Args:
-#         roi_rgb: region of interest array
-#         color_profile_rgb: color scale array
-#     Returns: array of scale_height indices
-#     """
-#     if len(roi_rgb.shape) == 3:
-#         roi_rgb = roi_rgb[np.newaxis, :, :, np.newaxis, :]
-#     elif len(roi_rgb.shape) == 4:
-#         roi_rgb = roi_rgb[:, :, :, np.newaxis, :]
-#     else:
-#         raise ValueError(f'ROI shape: {roi_rgb.shape}. Must have 3 or 4 dimensions')
-#     assert len(color_profile_rgb.shape) == 2, 'Color scale array must be two-dimensional (H, 3)'
-#     rgb_distances = np.sqrt(np.sum((roi_rgb - color_profile_rgb) ** 2, axis=-1))
-#     # indices of closest corresponding RGB value in color bar
-#     min_indices = rgb_distances.argmin(-1)
-#     return min_indices
 
 
 def closest_rgb(roi_rgb, color_profile_rgb):
