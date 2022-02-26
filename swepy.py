@@ -212,7 +212,7 @@ class Output(ttk.Frame):
             row = item['values']
             self.tv_selection.add(tuple(row))
         rows = list(self.tv_selection)
-        name = rows[0][0]
+        name = rows[0][0].split('.')[0] if '.' in rows[0][0] else rows[0][0]
         path = Path.cwd() / 'src' / 'cache' / f'{name}.pickle'
         self.results = utils.load_pickle(path)
         self.fig_panel.change_plot()
