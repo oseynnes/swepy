@@ -1,6 +1,8 @@
-# swepy
+![](./src/logo.001.png)
 
-A basic user interface to load and analyse shear wave elastography files recorded with **Hologic Supersonic** machines.
+# Documentation
+
+Swepy is a basic user interface to load and analyse shear wave elastography files recorded with **Hologic Supersonic** machines.
 
 The script works with **dicom files** and is optimised for Mach30 machines but should work with other machines from the Mach range.
 Scans from Aixplorer machines also seem to be compatible but have not yet been tested thoroughly.
