@@ -8,24 +8,27 @@ Scans from Aixplorer machines also seem to be compatible but have not yet been t
 The analysis currently consists in a graphical preview of the elastography measurements for each frame (violin plots), and calculations of mean and median values.
 Results can be exported to a `csv` or `xlsx` file.
 
-### Dependencies
+## Dependencies
 The scripts run with Python 3.8. All package dependencies are listed in [requirements.txt](https://github.com/oseynnes/swepy/blob/0c40955e136abe7604a92e6e166fc4a2e2d29919/requirements.txt).
 
-### Get started
+## Get started
 - Clone this repository
 - Install dependencies
-- Run the `main.py` file to start the user interface
-- Load a dicom file with an image sequence (video clip)
+- Run the `swepy.py` file to start the user interface
+- Load a dicom file with an image sequence (video clip, takes a few seconds)
 - Enter the following parameters found on the image frame:
-	- acquisition frequency of SWE frames (`SWE fhz` parameter)
-	- maximal scale value (`max. scale` parameter, in KPa or m/s)
+    - acquisition frequency of SWE frames (`SWE fhz` parameter)
+    - maximal scale value (`max. scale` parameter, in KPa or m/s)
 
 |![](./src/sc1.png)|![](./src/sc2.png)|
 |---|---|
 
-- (optional) Adjust ROI size (drag/drop on image)
+- (optional) Change ROI size or shape
 - Press `Analyse`
 - Find results preview and export interface in the `Results` tab.
 
 ![](./src/sc3.png)
+
+- Export to a `csv` or `xlsx` file
+
 
