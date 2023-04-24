@@ -44,4 +44,7 @@ based on the development or utilisation of the excellent [ElastoGUI](https://mip
 
 
 ## Citation
-If needed, this code can be referenced from the cff file of this repository.
+If needed, this code can be referenced from the cff file of this repository, or as follows:
+```
+Seynnes, O. (2023). swepy [Computer software]. https://github.com/oseynnes/swepy
+```
