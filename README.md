@@ -46,5 +46,13 @@ based on the development or utilisation of the excellent [ElastoGUI](https://mip
 ## Citation
 If needed, this code can be referenced from the cff file of this repository, or as follows:
 ```
-Seynnes, O. (2023). swepy [Computer software]. https://github.com/oseynnes/swepy
+@software{Seynnes_swepy_2023,
+author = {Seynnes, Olivier},
+license = {MIT},
+month = apr,
+title = {{swepy}},
+url = {https://github.com/oseynnes/swepy},
+year = {2023}
+}
 ```
+
