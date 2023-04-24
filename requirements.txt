@@ -1,5 +1,14 @@
-numpy~=1.20.2
-pillow~=8.2.0
-pydicom~=2.2.2
-pandas~=1.2.4
-matplotlib~=3.3.4
+numpy
+pillow
+pydicom
+python-gdcm
+# pylibjpeg
+pandas
+pandastable
+matplotlib
+scikit-image
+# future
+scikit-learn
+scipy
+seaborn
+detecta

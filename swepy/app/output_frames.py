@@ -5,11 +5,13 @@ from tkinter import ttk
 
 import numpy as np
 import pandas as pd
-from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
-                                               NavigationToolbar2Tk)
+import pandastable
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.figure import Figure
 
-import utils
+from swepy.processing import data_utils
+from swepy.processing.io.pickle_io import load_pickle
+from swepy.app.app_utils import warn_empty_cache, warn_no_selection
 
 
 class FilesPanel(ttk.LabelFrame):
@@ -19,23 +21,33 @@ class FilesPanel(ttk.LabelFrame):
         super().__init__(parent)
 
         self.config(text='Analysed files')
-        self.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NSEW)
+        self.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NW)
 
         columns = ('file_name', 'path')
         self.tv = ttk.Treeview(self, columns=columns, show='headings')
         self.tv.heading('file_name', text='File')
-        self.tv.column('file_name', width=100)
-        self.tv.heading('path', text='Path')
-        self.tv.column('path', width=200)
-        self.tv.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NSEW)
+        self.tv.column('file_name', minwidth=100)
+        self.tv.heading('path', text='Path', anchor=tk.W)
+        self.tv.column('path', minwidth=500)
+        self.tv.pack(ipadx=5, ipady=5, fill=tk.BOTH, expand=True)
+        self.add_scrollbars()
+
+    def add_scrollbars(self):
+        self.sb_x = ttk.Scrollbar(self, orient=tk.HORIZONTAL, command=self.tv.xview)
+        self.sb_y = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tv.yview)
+        self.tv.configure(xscrollcommand=self.sb_x.set, yscrollcommand=self.sb_y.set)
+        self.sb_x.pack(side='bottom', fill='x')
+        self.sb_y.pack(side='right', fill='y')
 
     def load_tv_from_pickle(self, paths):
-        cached = [utils.load_pickle(path) for path in paths]
+        """Load cached results from previous analyses"""
+        cached = [load_pickle(path) for path in paths]
         rows = [results['file'] for results in cached]
         for row in rows:
             self.tv.insert('', tk.END, values=row, iid=row[0])
 
     def clear_treeview(self):
+        """Clear table with analysed files"""
         self.tv.delete(*self.tv.get_children())
 
 
@@ -58,13 +70,14 @@ class HistoryPanel(ttk.LabelFrame):
 
     @staticmethod
     def select_cached():
+        """Retrieve cached results files if there are any"""
         filetypes = (('Cached files', '*.pickle'),)
-        initialdir = Path.cwd() / 'src' / 'cache'
+        initialdir = Path.cwd().parent / 'src' / 'cache'
         paths = fd.askopenfilenames(initialdir=initialdir, title="Select file(s)", filetypes=filetypes)
         if paths:
             return paths
         else:
-            utils.warn_empty_cache()
+            warn_empty_cache()
             return
 
 
@@ -104,8 +117,8 @@ class SavePanel(ttk.LabelFrame):
         if rows:
             for row in rows:
                 name = row[0].split('.')[0]
-                import_path = Path.cwd() / 'src' / 'cache' / f'{name}.pickle'
-                results = utils.load_pickle(import_path)
+                import_path = Path.cwd().parent / 'src' / 'cache' / f'{name}.pickle'
+                results = load_pickle(import_path)
                 export_path = Path(row[1]) / f'{name}.{file_format}'  # TODO: make results folder if it does not exists
                 dfs = pd.DataFrame.from_dict(results['stats'])
                 if file_format == 'csv':
@@ -113,7 +126,7 @@ class SavePanel(ttk.LabelFrame):
                 if file_format == 'xlsx':
                     dfs.to_excel(export_path, index_label='frame')
         else:
-            utils.warn_no_selection()
+            warn_no_selection()
             return
 
 
@@ -125,15 +138,19 @@ class FigPanel(ttk.Frame):
 
         self.output = parent
 
-        self.grid(row=0, column=1, rowspan=4, padx=5, pady=5, sticky=tk.NSEW)
+        self.grid(row=0, column=1, rowspan=5, padx=5, pady=5, sticky=tk.NSEW)
 
         self.lf0 = ttk.LabelFrame(self, text='Preview')
-        self.lf0.grid(row=0, column=1, rowspan=3, padx=5, pady=5, sticky=tk.NSEW)
+        self.lf0.pack(ipadx=5, ipady=5, fill=tk.X)
+        self.figure = Figure()
+        self.figure_canvas = FigureCanvasTkAgg(self.figure, self.lf0)
+        NavigationToolbar2Tk(self.figure_canvas, self.lf0)
+        self.figure_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-        self.lf1 = ttk.LabelFrame(self, text='Variable')
-        self.lf1.grid(row=4, column=1, padx=5, pady=5, sticky=tk.NSEW)
-        self.label_var = tk.StringVar()
-        self.label_var.set('youngs_m')
+        self.lf1 = ttk.LabelFrame(self, text='Variable', labelanchor='w')
+        self.lf1.pack(ipadx=5, ipady=5, fill=tk.X)
+        self.plot_swe_var = tk.StringVar()
+        self.plot_swe_var.set('youngs_m')
         self.y_labels = {'velocity': 'Wave velocity (m/s)',
                          'shear_m': 'Shear modulus (KPa)',
                          'youngs_m': "Young's modulus (KPa"}
@@ -143,45 +160,43 @@ class FigPanel(ttk.Frame):
                                     text=label,
                                     value=key,
                                     command=self.change_plot,
-                                    variable=self.label_var)
+                                    variable=self.plot_swe_var)
             radio.grid(column=grid_column, row=0, ipadx=10, ipady=10)
             grid_column += 1
 
-        self.replot_data(D=np.zeros([1, 600, 600]), swe_var='youngs_m')
+        self.results_btn_frame = ttk.Frame(self)
+        self.results_btn_frame.pack()
+        self.results_btn = ttk.Button(self.results_btn_frame, text='Display in table', command=self.display_results)
+        self.results_btn.grid(row=0, column=1, padx=5, pady=5, sticky=tk.NSEW)
 
-    def change_variable(self):
-        self.var = self.label_var.get()
+        # TODO: Add figure with colour analysis
 
     def change_plot(self):
+        """Load results and call function to refresh plot"""
         if self.output.results is None:
             return
-        self.change_variable()
-        D = self.output.results['raw'][self.var]
-        self.replot_data(D, self.var)
+        D = self.output.results['raw'][self.plot_swe_var.get()]
+        self.replot_data(D, self.plot_swe_var.get())
 
     def replot_data(self, D, swe_var):
-        """Reset widgets to plot new data
+        """Reset app to plot new data
         Args:
             D: data 3D array of shape (n frames, height, width).
             swe_var: variable to calculate, can only be either 'velocity', 'shear_m' or 'youngs_m'
         Returns: None
         """
-        for widget in self.lf0.winfo_children():
-            widget.destroy()
+
         swe_vars = ['velocity', 'shear_m', 'youngs_m']
         assert (swe_var in swe_vars), "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
-        self.label_var.set(swe_var)
-        self.change_variable()
+        # self.plot_swe_var.set(swe_var)
         frame_dim = D.shape[0]
         plot_data = D.reshape(frame_dim, -1)
 
-        figure = Figure(figsize=(6, 4), dpi=100)
-        figure_canvas = FigureCanvasTkAgg(figure, self.lf0)
-        NavigationToolbar2Tk(figure_canvas, self.lf0)
-        axes = figure.add_subplot()
+        self.figure.clear()
+        axes = self.figure.add_subplot()
         if np.nanmean(D) > 0:
             data_lists = [x for x in plot_data.tolist()]
-            filtered_lists = utils.filter_nans(data_lists)
+            filtered_lists = data_utils.filter_nans(data_lists)
             vp = axes.violinplot(filtered_lists,
                                  widths=1,
                                  showmeans=True,
@@ -189,16 +204,17 @@ class FigPanel(ttk.Frame):
                                  showextrema=False)
 
             for body in vp['bodies']:
-                body.set_facecolor('#D43F3A')
-                body.set_alpha(1)
+                body.set_facecolor('navy')
+                body.set_alpha(.5)
                 body.set_edgecolor('#473535')
 
-            vp['cmeans'].set_color('#473535')
+            vp['cmeans'].set_color('orange')
             vp['cmedians'].set_color('white')
 
             std = np.nanstd(D, axis=1)
             xy = [[l.vertices[:, 0].mean(), l.vertices[0, 1]] for l in vp['cmeans'].get_paths()]
             xy = np.array(xy)
+            axes.scatter(xy[:, 0], xy[:, 1], s=20, c="orange", marker="o", zorder=3)
             axes.vlines(xy[:, 0],
                         ymin=xy[:, 1] - std,
                         ymax=xy[:, 1] + std,
@@ -209,12 +225,29 @@ class FigPanel(ttk.Frame):
             axes.set_xlabel('SWE frames')
             axes.set_ylabel(self.y_labels[swe_var])
             axes.set_title(f"{self.output.results['file'][0]}, "
-                           f"Median: {int(np.nanmedian(D))}, "
-                           f"Mean: {int(np.nanmean(D))}, "
-                           f"STD: {int(np.nanstd(D))}")
+                           f"Median: {round(np.nanmedian(D), 2)}, "
+                           f"Mean: {round(np.nanmean(D), 2)}, "
+                           f"STD: {round(np.nanstd(D), 2)}")
 
-        figure_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        self.figure_canvas.draw_idle()
 
     def clear_figure(self):
         for widget in self.lf0.winfo_children():
             widget.destroy()
+
+    def display_results(self):
+        """Display results in a popup table"""
+        # adapted from https://stackoverflow.com/a/71827719/13147488
+        if not self.output.results:
+            return
+        else:
+            res_dict = self.output.results['stats']
+            df = pd.DataFrame.from_dict(res_dict)
+        table_frame = tk.Toplevel(self)
+        table_frame.title(self.output.results['file'][0])
+        root_x, root_y = self.winfo_rootx(), self.winfo_rooty()
+        offset_w = int(self.winfo_width())
+        table_frame.geometry(f'+{root_x + offset_w}+{root_y}')
+        tk.Label(table_frame, text="Results").grid(row=0, column=1, columnspan=3)
+        table = pandastable.Table(table_frame, dataframe=df)
+        table.show()

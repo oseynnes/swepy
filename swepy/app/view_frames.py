@@ -3,7 +3,8 @@ from tkinter import ttk
 
 from PIL import ImageTk, Image
 
-import utils
+from swepy.app.app_utils import warn_no_video
+from swepy.processing import data_utils
 
 
 class TopPanel(ttk.Frame):
@@ -20,10 +21,12 @@ class TopPanel(ttk.Frame):
 
 
 class LeftPanel(ttk.Frame):
-    """Panel of GUI displaying widgets related to file opening and analysis"""
+    """Panel of GUI displaying app related to file opening and analysis"""
 
     def __init__(self, parent):
         super().__init__(parent)
+
+        self.view = parent
 
         self.grid(row=1, column=0, rowspan=3, sticky=tk.NSEW)
 
@@ -42,29 +45,45 @@ class LeftPanel(ttk.Frame):
         self.scale_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_scale)
         self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5)
 
-        self.usr_params = utils.get_settings('SWE_PARAM')
+        self.usr_params = data_utils.get_settings('SWE_PARAM')
         if self.usr_params:
             self.usr_fhz.set(self.usr_params[0])
             self.usr_scale.set(self.usr_params[1])
 
-        self.enter_btn = ttk.Button(self.input_frame, text='OK', width=2)
-        self.enter_btn.grid(column=1, row=3, sticky=tk.E, padx=5, pady=5)
+        self.enter_btn = ttk.Button(self.input_frame, text='Set values')
+        self.enter_btn.grid(column=1, row=2, sticky=tk.E, padx=5, pady=5)
 
-        self.space_frame = ttk.Frame(self)
-        self.space_frame.grid(row=1, column=0, sticky=tk.NSEW)
-        spacer = tk.Label(self.space_frame, text='')
-        spacer.grid()
+        self.swe_var_frame = ttk.Frame(self)
+        self.swe_var_frame.grid(row=1, column=0, sticky=tk.NSEW)
+        self.variable_labels = {'velocity': 'V (m/s)',
+                                'shear_m': '\u03BC (kPa)',
+                                'youngs_m': "\u03B5 (kPa)"}
+        grid_column = 0
+        for key, label in self.variable_labels.items():
+            radio = ttk.Radiobutton(self.swe_var_frame,
+                                    text=label,
+                                    value=key,
+                                    variable=self.view.swe_var,
+                                    command=lambda: self.log_swe_var())
+            radio.grid(column=grid_column, row=3, ipadx=5, ipady=20)
+            grid_column += 1
 
         self.tree_frame = ttk.Frame(self)
         self.tree_frame.grid(row=2, column=0, sticky=tk.NSEW)
         columns = ('dcm_property', 'value')
-        self.variables = ('No. of frames', 'No. of rows', 'No. of columns', 'B mode Fhz')
+        self.var_names = ('Scan ID',
+                          'Date/time',
+                          'No. of frames',
+                          'No. of rows',
+                          'No. of columns',
+                          'Lossy compression',
+                          'B mode Fhz')
         self.values = (None,)
         self.tv = ttk.Treeview(self.tree_frame, columns=columns, show='headings')
-        self.tv.heading('dcm_property', text="DCM Property")
+        self.tv.heading('dcm_property', text="File properties")
         self.tv.column('dcm_property', width=100)
         self.tv.heading("value", text="Value")
-        self.tv.column('value', width=50)
+        self.tv.column('value', width=200)
         self.tv.grid(sticky=tk.NSEW)
 
         self.reset_roi_btn = ttk.Button(self.tree_frame, text="Reset ROI", width=8)
@@ -72,6 +91,10 @@ class LeftPanel(ttk.Frame):
 
         self.analyse_btn = ttk.Button(self.tree_frame, text="Analyse", width=8)
         self.analyse_btn.grid(sticky=tk.W)
+
+    def log_swe_var(self):
+        """Save last chosen SWE variable"""
+        data_utils.save_swe_var(self.view.swe_var.get())
 
 
 class ImgPanel(ttk.Frame):
@@ -83,7 +106,7 @@ class ImgPanel(ttk.Frame):
         self.view = parent
 
         self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
-        self.canvas.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
+        self.canvas.pack(ipadx=5, ipady=5, fill=tk.BOTH, expand=True)
         self.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
         self.columnconfigure(1, weight=4)
         self.rowconfigure(1, weight=4)
@@ -97,7 +120,7 @@ class ImgPanel(ttk.Frame):
         self.new_roi = tk.BooleanVar()
         self.new_roi.set(True)
         self.roi_coords = []
-        self.polyg1 = self.polyg2 = None
+        self.polyg_top = self.polyg_down = None
 
         self.current_array = None
         self.img = None
@@ -108,25 +131,25 @@ class ImgPanel(ttk.Frame):
         self.frame_label_var = tk.StringVar()
 
         # Choice of ROI shape
-        self.btn_frame = ttk.LabelFrame(self, text='ROI shape')
+        self.roi_frame = ttk.LabelFrame(self, text='ROI shape', labelanchor='w')
         self.shape = tk.StringVar()
         self.shape.set('rectangle')
 
         ttk.Radiobutton(
-            self.btn_frame,
+            self.roi_frame,
             text='Rectangle',
             value='rectangle',
             variable=self.shape,
             command=self.reset_draw).grid(column=0, row=0, padx=5, pady=5)
 
         ttk.Radiobutton(
-            self.btn_frame,
+            self.roi_frame,
             text='Polygon',
             value='polygon',
             variable=self.shape,
             command=self.reset_draw).grid(column=1, row=0, padx=5, pady=5)
 
-        self.btn_frame.grid(column=1, row=4, padx=5, pady=5, sticky='ew')
+        self.roi_frame.pack(ipadx=5, ipady=5, anchor=tk.W, expand=True)
 
     # Specific functions
     def activate_draw(self):
@@ -154,7 +177,7 @@ class ImgPanel(ttk.Frame):
         """Generate mirror coordinates of ROI in other field of view,
         when FoVs are in "top-bottom" configuration
         Args:
-            coords (list): (x, y) coordinates for polygon points
+            coords: (x, y) coordinates for polygon points
         Returns: offset list of (x, y) coordinates
         """
         roi_coords = self.roi_coords if not coords else coords
@@ -169,7 +192,7 @@ class ImgPanel(ttk.Frame):
 
     def reset_draw(self):
         self.clear_coords()
-        self.canvas.delete(self.polyg1, self.polyg2)
+        self.canvas.delete(self.polyg_top, self.polyg_down)
         self.activate_draw()
 
     def get_top_coords(self):
@@ -182,38 +205,38 @@ class ImgPanel(ttk.Frame):
             self.draw_rois()
 
     def draw_rois(self):
-        self.canvas.delete(self.polyg1, self.polyg2)
+        self.canvas.delete(self.polyg_top, self.polyg_down)
         if self.shape.get() == 'rectangle':
             self.draw_rectangle()
         elif self.shape.get() == 'polygon':
             self.draw_polygon()
 
     def draw_rectangle(self):
-        self.polyg1 = self.canvas.create_rectangle(self.roi_coords,
-                                                   outline='green',
-                                                   width=2)
-        self.polyg2 = self.canvas.create_rectangle(*self.mirror_coords(),
-                                                   outline='green',
-                                                   width=2)
+        self.polyg_top = self.canvas.create_rectangle(self.roi_coords,
+                                                      outline='green',
+                                                      width=2)
+        self.polyg_down = self.canvas.create_rectangle(*self.mirror_coords(),
+                                                       outline='green',
+                                                       width=2)
         self.get_top_coords()
 
     def draw_polygon(self):
         if len(self.roi_coords) == 2:
-            self.polyg1 = self.canvas.create_line(self.roi_coords,
-                                                  fill='green',
-                                                  width=2)
-            self.polyg2 = self.canvas.create_line(self.mirror_coords(),
-                                                  fill='green',
-                                                  width=2)
+            self.polyg_top = self.canvas.create_line(self.roi_coords,
+                                                     fill='green',
+                                                     width=2)
+            self.polyg_down = self.canvas.create_line(self.mirror_coords(),
+                                                      fill='green',
+                                                      width=2)
         elif len(self.roi_coords) > 2:
-            self.polyg1 = self.canvas.create_polygon(self.roi_coords,
-                                                     fill='',
-                                                     outline='green',
-                                                     width=2)
-            self.polyg2 = self.canvas.create_polygon(self.mirror_coords(),
-                                                     fill='',
-                                                     outline='green',
-                                                     width=2)
+            self.polyg_top = self.canvas.create_polygon(self.roi_coords,
+                                                        fill='',
+                                                        outline='green',
+                                                        width=2)
+            self.polyg_down = self.canvas.create_polygon(self.mirror_coords(),
+                                                         fill='',
+                                                         outline='green',
+                                                         width=2)
 
     def on_double_click(self, event):
         self.get_top_coords()
@@ -224,30 +247,30 @@ class ImgPanel(ttk.Frame):
         self.new_roi.set(False)
         x, y = event.x, event.y
         self.roi_coords.append((x, y))
-        self.canvas.delete(self.polyg1, self.polyg2)
+        self.canvas.delete(self.polyg_top, self.polyg_down)
         if len(self.roi_coords) == 1:
             pt_coords = (x - 1, y - 1, x + 1, y + 1)
-            self.polyg1 = self.canvas.create_oval(pt_coords,
-                                                  fill='green',
-                                                  outline='green',
-                                                  width=5)
-            self.polyg2 = self.canvas.create_oval(self.mirror_coords(pt_coords),
-                                                  fill='green',
-                                                  outline='green',
-                                                  width=5)
+            self.polyg_top = self.canvas.create_oval(pt_coords,
+                                                     fill='green',
+                                                     outline='green',
+                                                     width=5)
+            self.polyg_down = self.canvas.create_oval(self.mirror_coords(pt_coords),
+                                                      fill='green',
+                                                      outline='green',
+                                                      width=5)
         else:
             self.draw_rois()
 
 
 class DisplayControls(ttk.Frame):
-    """Panel of GUI displaying widgets to display images"""
+    """Panel of GUI displaying app to display images"""
 
     def __init__(self, parent):
         super().__init__(parent)
 
         self.img_panel = parent
 
-        self.grid(row=5, column=1, sticky=tk.EW)
+        self.pack(ipadx=5, ipady=5, fill=tk.BOTH, expand=True)
 
         self.current_frame = 0
 
@@ -294,13 +317,14 @@ class DisplayControls(ttk.Frame):
                 self.play_btn.config(text='Play')
                 self.current_frame = 0
         else:
-            utils.warn_no_video()
+            warn_no_video()
             return
 
     def update_frame(self):
         self.current_value.set(self.current_frame)
         self.frame_label.config(text=f'{self.current_frame + 1}/{self.img_panel.n_frames}')
-        self.img = ImageTk.PhotoImage(image=Image.fromarray(self.img_panel.current_array[self.current_frame]))
+        self.image = Image.fromarray(self.img_panel.current_array[self.current_frame])
+        self.img = ImageTk.PhotoImage(image=self.image)
         self.img_panel.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
         self.img_panel.set_rois()
 

@@ -1,0 +1,16 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: swepy
+message: Analysis tool for shear wave elastography scans
+type: software
+authors:
+  - given-names: Olivier
+    family-names: Seynnes
+    email: oliviers@nih.no
+    orcid: 'https://orcid.org/0000-0002-1289-246X'
+    affiliation: Norwegian School of Sport Sciences
+repository-code: 'https://github.com/oseynnes/swepy'
+license: MIT
+date-released: '2023-04-24'

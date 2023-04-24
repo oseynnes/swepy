@@ -1,76 +1,19 @@
-import json
-import pickle
 import webbrowser
 from pathlib import Path
-from tkinter.messagebox import showinfo, showerror
 
 import numpy as np
+from matplotlib.colors import LinearSegmentedColormap
+
+from swepy.processing.io.json_io import load_json, save_json
+from swepy.processing.io.pickle_io import save_pickle
 
 
-def warn_no_video():
-    showinfo(title='No video',
-             message='Please load a Dicom file first')
-
-
-def warn_wrong_entry():
-    showerror(title='Wrong input',
-              message='Please inform the frequency and scale fields with a number')
-
-
-def warn_no_selection():
-    showinfo(title='No Selection',
-             message='Please select at least one file in the list')
-
-
-def warn_empty_cache():
-    showinfo(title='No previous results',
-             message='The list of previously analysed files is empty')
-
-
-def set_win_geometry(container, width, height):
-    """Set window position relative to screen size"""
-    screen_width = container.winfo_screenwidth()
-    screen_height = container.winfo_screenheight()
-    center_x = int(screen_width / 2 - width / 2)
-    center_y = int(screen_height / 3 - height / 3)
-    container.geometry(f'{width}x{height}+{center_x}+{center_y}')
-
-
-def load_json(path):
-    """Return a content object for a JSON file"""
-    with open(path, 'r') as file:
-        return json.load(file)
-
-
-def save_json(content, path):
-    """save a content object in a JSON file"""
-    with open(path, 'w') as file:
-        json.dump(content, file)
-
-
-def load_pickle(path):
-    """Return a content object from a pickle file"""
-    with open(path, 'rb') as handle:
-        return pickle.load(handle)
-
-
-def save_pickle(content, path):
-    """Pickle a content object"""
-    with open(path, 'wb') as handle:
-        pickle.dump(content, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-def clear_pickle():
-    """Delete pickle files from cache directory"""
-    src_path = Path.cwd() / 'src' / 'cache'
-    paths = list(Path(src_path).rglob('*.pickle'))
-    for path in paths:
-        path.unlink()
+# warnings.simplefilter('ignore')  # Fix NumPy issues.
 
 
 def settings_io(temp=None):
     """Load settings from previous analyses"""
-    dir_path = Path.cwd() / 'src' / 'cache'
+    dir_path = Path.cwd().parent / 'src' / 'cache'
     json_path = dir_path / 'settings.json'
 
     if temp:
@@ -109,11 +52,16 @@ def delete_settings(param=None):
     settings_io(temp)
 
 
+def set_settings_paths():
+    """Set path for json file containing settings"""
+    dir_path = Path.cwd().parent / 'src' / 'cache'
+    json_path = dir_path / 'settings.json'
+    return dir_path, json_path
+
+
 def save_path(path):
     """Add file path to a list of recent file paths, in a JSON file"""
-    dir_path = Path.cwd() / 'src' / 'cache'
-    json_path = dir_path / 'settings.json'
-
+    dir_path, json_path = set_settings_paths()
     if json_path.exists():
         temp = load_json(json_path)
         if path in temp['RECENT_PATHS']:
@@ -134,9 +82,7 @@ def save_path(path):
 
 def save_usr_input(fhz, scale):
     """Save SWE frequency and max. scale from colour bar"""
-    dir_path = Path.cwd() / 'src' / 'cache'
-    json_path = dir_path / 'settings.json'
-
+    dir_path, json_path = set_settings_paths()
     if json_path.exists():
         temp = load_json(json_path)
         temp['SWE_PARAM'] = [fhz, scale]
@@ -145,12 +91,28 @@ def save_usr_input(fhz, scale):
 
 def save_roi_coords(roi_coords):
     """Save roi coordinates from 1st analysed file"""
-    dir_path = Path.cwd() / 'src' / 'cache'
-    json_path = dir_path / 'settings.json'
-
+    dir_path, json_path = set_settings_paths()
     if json_path.exists():
         temp = load_json(json_path)
         temp['ROI_COORDS'] = [roi_coords]
+        save_json(temp, json_path)
+
+
+def save_swe_var(swe_var):
+    """Save SWE variable chosen by user"""
+    dir_path, json_path = set_settings_paths()
+    if json_path.exists():
+        temp = load_json(json_path)
+        temp['SWE_VAR'] = [swe_var]
+        save_json(temp, json_path)
+
+
+def save_cmap_source(cmap_loc):
+    """Save cmap preference"""
+    dir_path, json_path = set_settings_paths()
+    if json_path.exists():
+        temp = load_json(json_path)
+        temp['CMAP_LOC'] = [cmap_loc]
         save_json(temp, json_path)
 
 
@@ -161,39 +123,10 @@ def pickle_results(file_path, data):
         data (dict): analysis results
     Returns: None
     """
-    dir_path = Path.cwd() / 'src' / 'cache'
+    dir_path = Path.cwd().parent / 'src' / 'cache'
     pickle_path = dir_path / f'{file_path.stem}.pickle'
 
     save_pickle(data, pickle_path)
-
-
-def log_entry(name, string_var, ttk_table, row_id, var_type=float):
-    """Save entry from tkinter entry to ttk.TreeView instance
-    Args:
-        name (str):
-        string_var: variable to log in
-        ttk_table: ttk.TreeView instance
-        row_id (str): iid parameter of created row
-        var_type (type): desired type of variable to log in
-    Returns: variable inserted in ttk.TreeView instance
-    """
-    if len(string_var.get()) == 0:
-        value = None
-    elif var_type(string_var.get()) >= 0:
-        value = var_type(string_var.get())
-        idx = 5 if isinstance(value, int) else 4  # with 4 pre-existing rows (0:3)
-    else:
-        warn_wrong_entry()
-        return
-    if value:
-        if row_id in ttk_table.get_children():
-            ttk_table.delete(row_id)
-        ttk_table.insert(parent='',
-                         index=idx,
-                         iid=row_id,
-                         values=(name, value))
-    string_var.set('')
-    return value
 
 
 def closest_rgb(roi_rgb, color_profile_rgb):
@@ -207,7 +140,7 @@ def closest_rgb(roi_rgb, color_profile_rgb):
     if len(roi_rgb.shape) == 3:
         roi_rgb = roi_rgb[:, :, np.newaxis, :]
     elif len(roi_rgb.shape) == 2:
-        roi_rgb = roi_rgb[np.newaxis, np.newaxis, :]
+        roi_rgb = roi_rgb[:, np.newaxis, :]
     else:
         raise ValueError(f'ROI shape: {roi_rgb.shape}. Must have 2 or 3 dimensions')
     assert len(color_profile_rgb.shape) == 2, 'Color scale array must be two-dimensional (H, 3)'
@@ -321,3 +254,50 @@ def rect_polygonise(rect_coord):
     x1 = rect_coord[1][0]
     y1 = rect_coord[1][1]
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+
+
+def stretch_colormap(cmap, n=255):
+    """Interpolate color map to n colors
+
+    Args:
+        cmap: color map to interpolate
+        n: number of colours in the interpolated color map
+
+    Returns:
+        the interpolated color map
+
+    Notes:
+        adapted from https://stackoverflow.com/a/67985432/13147488
+    """
+    cmap_object = LinearSegmentedColormap.from_list('', np.array(cmap) / 255, 256)
+    cmap_interpolated = (cmap_object(np.linspace(0, 1, n)) * 255).astype(np.uint8)
+    return cmap_interpolated[:, :3]
+
+
+def format_str_datetime(dicom_meta):
+    """Format string containing date and time information for display
+    Args:
+        dicom_meta: pydicom object (dictionary like) metadata from dicom file
+
+    Returns: formated string as 'dd/mm/yyyy hh:mm:ss'
+
+    """
+    s = dicom_meta.get('AcquisitionDateTime', '(missing)')
+    elts = s[0:4], s[4:6], s[6:8], s[8:10], s[10:12], s[12:14]
+    date = '/'.join(elts[0:3][::-1])
+    time = ':'.join(elts[3:6])
+    return ' '.join((date, time))
+
+
+def clear_pickle():
+    """Delete pickle files from cache directory"""
+    src_path = Path.cwd().parent / 'src' / 'cache'
+    paths = list(Path(src_path).rglob('*.pickle'))
+    for path in paths:
+        path.unlink()
+
+
+def get_compression_status(ds_value):
+    """Indicate if file is compressed based on 'LossyImageCompression' tag of DICOM file"""
+    compression = 'yes' if int(ds_value) > 0 else 'no'
+    return compression
