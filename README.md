@@ -38,12 +38,13 @@ The scripts run with Python 3.8. All package dependencies are listed in [require
   
   
 ## Acknowledgements
-I am grateful to Neil Cronin for his input early in the project.  
-I also thank Valentin Doguet, Antoine Nordez and Aurélie Sarcher for sharing their experience and views,
+I am grateful to Neil Cronin (University of Jyväskylä) for his input early in the project.  
+I also thank Valentin Doguet, Antoine Nordez and Aurélie Sarcher (Nantes Université) for sharing their experience and views,
 based on the development or utilisation of the excellent [ElastoGUI](https://mip.univ-nantes.fr/fr/brevets-logiciels).
 
 
 ## Citation
+swepy is a project developed at the Norwegian School of Sport Sciences.
 If needed, this code can be referenced from the cff file of this repository, or as follows:
 ```
 @software{Seynnes_swepy_2023,
