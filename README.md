@@ -17,7 +17,7 @@ The scripts run with Python 3.8. All package dependencies are listed in [require
 ## Get started
 - Clone this repository
 - Install dependencies
-- Run the `start.py` file to start the user interface
+- Run the `swepy/start.py` file to start the user interface
 - Load a DICOM file containing an image sequence (generally a video clip, takes a few seconds)
 - Enter the following parameters found on the image frame:
     - acquisition frequency of SWE frames (`SWE fhz` parameter)
