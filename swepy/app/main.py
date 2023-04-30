@@ -137,7 +137,6 @@ class View(ttk.Frame):
 
     def load_file(self):
         """Pass variables and scan array to ImgPanel frame, update View frame"""
-
         self.img_panel.fov_coords = self.fov_coords
         self.img_panel.roi_coords = self.init_roi_coords
         self.img_panel.current_array = self.img_array
@@ -159,7 +158,6 @@ class Controller:
 
     def get_dicom_data(self):
         """Load DICOM data in View frame"""
-
         self.data.load_dicom()
         self.view.ds = self.data.ds
         self.view.img_array = self.data.img_array
@@ -170,7 +168,6 @@ class Controller:
 
     def get_swe_array(self, swe_fhz):
         """Call method to get array of SWE unique scans"""
-
         return self.data.resample(swe_fhz)
 
     def set_swe_variable(self):
@@ -180,7 +177,6 @@ class Controller:
 
     def analyse(self):
         """Get data and call methods for analysis and preview"""
-
         self.data.swe_fhz = self.view.swe_fhz
         self.data.max_scale = self.view.max_scale
         self.set_swe_variable()

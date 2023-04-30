@@ -1,3 +1,4 @@
+import tkinter
 from pathlib import Path
 
 import detecta
@@ -6,7 +7,6 @@ import scipy.io as sio
 from pydicom import dcmread
 from pydicom.pixel_data_handlers.util import convert_color_space
 from skimage.draw import polygon
-import math
 
 from src.src_utils import get_project_root
 from swepy.app import app_utils
@@ -33,10 +33,21 @@ class DcmData:
         self.bmode_fhz = None
         self.swe_fhz = None
         self.max_scale = None
+        self.sat_thresh_var = tkinter.IntVar()
+        self.set_saturated_threshold()
         self.analysis_swe_var = None
         self.results = None
 
         self.void_threshold = 150  # value used in Elastogui
+
+    def set_saturated_threshold(self):
+        """Try and read the percentage of the max scale to use as a threshold
+        above which pixels are considered saturated"""
+        sat_thresh = data_utils.get_settings('SAT_THRESH')
+        if sat_thresh:
+            self.sat_thresh_var.set(sat_thresh[0])
+        else:
+            self.sat_thresh_var.set(98)  # set default value to 98%
 
     def get_img_name(self):
         if self.path:
@@ -115,13 +126,12 @@ class DcmData:
         rr, cc = polygon(coords_arr[:, 0], coords_arr[:, 1])
         return img_arr[:, cc, rr, :]
 
-    def calc_void_percent(self):
-        """Calculate percentage of void pixels in SWE ROI"""
+    def calc_pixel_percent(self, target):
         dims = self.filtered_values.shape
-        void_total = np.full(dims[0], dims[1])
-        non_void = np.count_nonzero(~np.isnan(self.filtered_values), axis=1)
-        void_percent = (void_total - non_void) / void_total * 100
-        return void_percent
+        total_count = np.full(dims[0], dims[1])
+        count = np.count_nonzero(target, axis=1)
+        pixel_percent = (count / total_count) * 100
+        return pixel_percent
 
     def void_filter(self):
         """Create mask of void pixels in image array
@@ -178,7 +188,12 @@ class DcmData:
         indices = data_utils.closest_rgb(self.rois, self.colour_profile)
         self.mapped_values = self.real_values[indices]
         self.filtered_values = np.where(filter_mask, self.mapped_values, np.nan)
-        self.void_percent = self.calc_void_percent()
+
+        saturated_pxls = self.filtered_values > self.max_scale * self.sat_thresh_var.get() / 100
+        self.saturated_percent = self.calc_pixel_percent(saturated_pxls)
+
+        voided_pxls = np.isnan(self.filtered_values)
+        self.void_percent = self.calc_pixel_percent(voided_pxls)
         if np.all(self.void_percent == 100):
             app_utils.warn_no_swe_data()
             exit()
@@ -194,6 +209,7 @@ class DcmData:
              'raw': {},
              'stats': {}}
         d['stats']['%_void'] = self.void_percent
+        d['stats'][f'%_saturated (> {self.sat_thresh_var.get()}% maxscale)'] = self.saturated_percent
         for target_var in target_vars:
             if target_var == self.analysis_swe_var:
                 d['raw'][target_var] = self.filtered_values

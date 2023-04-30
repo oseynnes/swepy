@@ -77,11 +77,26 @@ class Settings(tk.Toplevel):
         super().__init__(parent)
 
         self.menu = parent
-        self.geometry('300x100')
+        self.geometry('300x160')
         self.title('Settings')
 
+        # user entry for % of max scale above which pixels will be quantified as saturated
+        # implementation based on https://stackoverflow.com/a/43826075/13147488
+        self.sat_frame = ttk.LabelFrame(self, text='Pixel saturation threshold (% of max scale)')
+        self.sat_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        self.usr_entry = ttk.Entry(self.sat_frame,
+                                   textvariable=self.menu.app.data.sat_thresh_var,
+                                   validate='key',
+                                   validatecommand=(self.sat_frame.register(self.is_number), '%P'))
+        self.usr_entry.grid()
+        self.current_value = ttk.Label(self.sat_frame, text=f'threshold: {self.menu.app.data.sat_thresh_var.get()}%')
+        self.current_value.grid(row=0, column=1)
+        self.current_value.bind('<<UpdateNeeded>>', self.update_current_value)
+
+        # user entry for origin of colour map to use for scaling
+        # The external map is a standard colour scale ('Jet') from ElastoGUI programme
         self.cmap_frame = ttk.LabelFrame(self, text='Source of colour map')
-        self.cmap_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        self.cmap_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
         self.cmap_labels = {'local_cmap': 'From image',
                             'external_cmap': 'From standard reference'}
         grid_column = 0
@@ -96,7 +111,23 @@ class Settings(tk.Toplevel):
             grid_column += 1
 
         self.close_btn = ttk.Button(self, text='Close', command=self.destroy)
-        self.close_btn.grid(column=0, row=1, sticky=tk.E, padx=5, pady=5)
+        self.close_btn.grid(column=0, row=2, sticky=tk.E, padx=5, pady=5)
+
+    def is_number(self, value):
+        try:
+            int(value)
+            # print('value:', value)
+        except ValueError:
+            return False
+        self.current_value.event_generate('<<UpdateNeeded>>', when='tail')
+        data_utils.save_sat_thresh(value)
+        return True
+
+    def update_current_value(self, event):
+        w = event.widget
+        # number = int(self.usr_entry.get())
+        number = int(self.menu.app.data.sat_thresh_var.get())
+        w['text'] = f'threshold: {number}%'
 
     def log_cmap_loc(self):
         data_utils.save_cmap_source(self.menu.app.view.cmap_loc_var.get())

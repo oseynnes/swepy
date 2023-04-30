@@ -116,6 +116,15 @@ def save_cmap_source(cmap_loc):
         save_json(temp, json_path)
 
 
+def save_sat_thresh(sat_thresh):
+    """Save chosen saturation level"""
+    dir_path, json_path = set_settings_paths()
+    if json_path.exists():
+        temp = load_json(json_path)
+        temp['SAT_THRESH'] = [sat_thresh]
+        save_json(temp, json_path)
+
+
 def pickle_results(file_path, data):
     """Add analysis results to a pickle file
     Args:
