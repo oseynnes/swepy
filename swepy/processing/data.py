@@ -11,6 +11,7 @@ from skimage.draw import polygon
 from src.src_utils import get_project_root
 from swepy.app import app_utils
 from swepy.processing import data_utils
+from swepy.processing.data_utils import mean_lowest_stdev_subarray
 
 
 class DcmData:
@@ -33,8 +34,9 @@ class DcmData:
         self.bmode_fhz = None
         self.swe_fhz = None
         self.max_scale = None
-        self.sat_thresh_var = tkinter.IntVar()
-        self.set_saturated_threshold()
+        if tkinter._default_root is not None:
+            self.sat_thresh_var = tkinter.IntVar()
+            self.set_saturated_threshold()
         self.analysis_swe_var = None
         self.results = None
 
@@ -80,11 +82,12 @@ class DcmData:
         self.top_fov_coords = self.get_roi_coord(self.top_fov)
         self.bmode_fhz = float(self.ds.RecommendedDisplayFrameRate)
         img_array_raw = self.ds.pixel_array
-        if (0x0008, 0x2111) in self.ds and 'Lossy' in self.ds[
-            0x0008, 0x2111].value:  # check if there was lossy compression
-            self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
-        else:
-            self.img_array = img_array_raw
+        # if (0x0008, 0x2111) in self.ds and 'Lossy' in self.ds[
+        #     0x0008, 0x2111].value:  # check if there was lossy compression
+        #     self.img_array = convert_color_space(img_array_raw, 'YBR_FULL_422', 'RGB', per_frame=True)
+        # else:
+        #     self.img_array = img_array_raw
+        self.img_array = img_array_raw  # disabled above code 20250117 as it no longer seemed required
 
     def detect_unique_swe(self):
         """Retrieve indices of frames with unique SWE ROI"""
@@ -223,6 +226,8 @@ class DcmData:
             d['stats']['_'.join((target_var, 'SD'))] = np.nanstd(filtered, axis=1)
         self.results = d
         self.mean = np.nanmean(self.filtered_values)
+        self.mean_low_stdev, mask = mean_lowest_stdev_subarray(self.filtered_values, return_mask=True)
+        d['stats']['Low stdev subarray'] = mask
         self.median = np.nanmedian(self.filtered_values)
 
 

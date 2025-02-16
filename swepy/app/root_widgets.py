@@ -50,14 +50,16 @@ class MenuBar(tk.Menu):
         data_utils.delete_settings('RECENT_PATHS')
 
     def select_files(self):
-        filetypes = (('DICOM files', '*.dcm'), ('All files', '*.*'))
-        temp_path = Path.cwd() / 'src' / 'cache' / 'settings.json'
+        # filetypes = (('DICOM files', '*.dcm'), ('All files', '*.*'))
+        # filetypes unused for now, to make files without extension selectable by default
+        temp_path = Path('..') / 'src' / 'cache' / 'settings.json'
         initialdir = '/'
         if temp_path.exists():
             temp = json_io.load_json(temp_path)
             if temp['RECENT_PATHS']:
                 initialdir = Path(temp['RECENT_PATHS'][0]).parent
-        paths = fd.askopenfilenames(initialdir=initialdir, title="Select DICOM file(s)", filetypes=filetypes)
+        # paths = fd.askopenfilenames(initialdir=initialdir, title="Select DICOM file(s)", filetypes=filetypes)
+        paths = fd.askopenfilenames(initialdir=initialdir, title="Select DICOM file(s)")
         if paths:
             self.paths = [Path(path) for path in paths]
             return self.paths

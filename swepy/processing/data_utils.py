@@ -310,3 +310,61 @@ def get_compression_status(ds_value):
     """Indicate if file is compressed based on 'LossyImageCompression' tag of DICOM file"""
     compression = 'yes' if int(ds_value) > 0 else 'no'
     return compression
+
+
+def mean_lowest_stdev_subarray(arr, return_mask=False):
+    """
+    Finds the five successive values in the input array (or its row means if it's 2D) that result in the lowest
+    standard deviation, calculates their average, and returns a boolean mask for the selected values.
+
+    Args:
+        arr (numpy.ndarray): A 1D or 2D numpy array of values.
+
+    Returns:
+        tuple: A tuple containing:
+            - float: The average of the five successive values with the lowest standard deviation.
+            - numpy.ndarray: A 1D boolean mask array indicating the values that are kept.
+
+    Raises:
+        ValueError: If the input is a 1D array with fewer than 5 elements, or any row in a 2D array has fewer than 5 elements.
+    """
+    # Check if the input is a 2D array
+    if arr.ndim == 2:
+        if arr.shape[1] < 5:
+            raise ValueError("Each row in the 2D array must contain at least 5 elements")
+
+        # Compute the mean of each column to form a 1D array
+        mean_array = np.nanmean(arr, axis=1)
+    elif arr.ndim == 1:
+        if len(arr) < 5:
+            raise ValueError("The 1D array must contain at least 5 elements")
+
+        mean_array = arr
+    else:
+        raise ValueError("Input must be a 1D or 2D numpy array")
+
+    # Initialize variables to store the minimum standard deviation and its corresponding subarray
+    min_std_dev = float('inf')
+    best_start_index = None
+
+    # Iterate over possible starting indices for subarrays of length 5
+    for i in range(len(mean_array) - 4):
+        subarray = mean_array[i:i + 5]  # Get a subarray of 5 consecutive elements
+        std_dev = np.std(subarray)  # Calculate the standard deviation of the subarray
+
+        # Check if the current standard deviation is the smallest found so far
+        if std_dev < min_std_dev:
+            min_std_dev = std_dev
+            best_start_index = i
+
+    # Create a boolean mask for the selected values
+    mask = np.zeros(len(mean_array), dtype=bool)
+    mask[best_start_index:best_start_index + 5] = True
+
+    # Calculate the average of the subarray with the lowest standard deviation
+    average_of_best_subarray = np.mean(mean_array[best_start_index:best_start_index + 5])
+
+    if return_mask:
+        return average_of_best_subarray, mask
+    else:
+        return average_of_best_subarray

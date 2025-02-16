@@ -10,6 +10,7 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationTool
 from matplotlib.figure import Figure
 
 from swepy.processing import data_utils
+from swepy.processing.data_utils import mean_lowest_stdev_subarray
 from swepy.processing.io.pickle_io import load_pickle
 from swepy.app.app_utils import warn_empty_cache, warn_no_selection
 
@@ -227,6 +228,7 @@ class FigPanel(ttk.Frame):
             axes.set_title(f"{self.output.results['file'][0]}, "
                            f"Median: {round(np.nanmedian(D), 2)}, "
                            f"Mean: {round(np.nanmean(D), 2)}, "
+                           f"Mean_low_stdev: {round(mean_lowest_stdev_subarray(D), 2)}, "
                            f"STD: {round(np.nanstd(D), 2)}")
 
         self.figure_canvas.draw_idle()
