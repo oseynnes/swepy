@@ -328,16 +328,19 @@ def mean_lowest_stdev_subarray(arr, return_mask=False):
     Raises:
         ValueError: If the input is a 1D array with fewer than 5 elements, or any row in a 2D array has fewer than 5 elements.
     """
+    min_n_frame = 5
     # Check if the input is a 2D array
     if arr.ndim == 2:
         if arr.shape[1] < 5:
-            raise ValueError("Each row in the 2D array must contain at least 5 elements")
+            print(f'Video file contains less than 5 frames. Using only {arr.shape[1]} frames.')
+            min_n_frame = arr.shape[1]
 
         # Compute the mean of each column to form a 1D array
         mean_array = np.nanmean(arr, axis=1)
     elif arr.ndim == 1:
         if len(arr) < 5:
-            raise ValueError("The 1D array must contain at least 5 elements")
+            print(f'Video file contains less than 5 frames. Using only {len(arr)} frames.')
+            min_n_frame = len(arr)
 
         mean_array = arr
     else:
@@ -347,9 +350,9 @@ def mean_lowest_stdev_subarray(arr, return_mask=False):
     min_std_dev = float('inf')
     best_start_index = None
 
-    # Iterate over possible starting indices for subarrays of length 5
-    for i in range(len(mean_array) - 4):
-        subarray = mean_array[i:i + 5]  # Get a subarray of 5 consecutive elements
+    # Iterate over possible starting indices for subarrays of length 5 or less
+    for i in range(len(mean_array) - (min_n_frame - 1)):
+        subarray = mean_array[i:i + min_n_frame]  # Get a subarray of consecutive elements
         std_dev = np.std(subarray)  # Calculate the standard deviation of the subarray
 
         # Check if the current standard deviation is the smallest found so far
@@ -359,10 +362,10 @@ def mean_lowest_stdev_subarray(arr, return_mask=False):
 
     # Create a boolean mask for the selected values
     mask = np.zeros(len(mean_array), dtype=bool)
-    mask[best_start_index:best_start_index + 5] = True
+    mask[best_start_index:best_start_index + min_n_frame] = True
 
     # Calculate the average of the subarray with the lowest standard deviation
-    average_of_best_subarray = np.mean(mean_array[best_start_index:best_start_index + 5])
+    average_of_best_subarray = np.mean(mean_array[best_start_index:best_start_index + min_n_frame])
 
     if return_mask:
         return average_of_best_subarray, mask
