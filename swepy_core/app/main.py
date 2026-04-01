@@ -2,13 +2,13 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-from swepy.app import app_utils
-from swepy.app.output_frames import FilesPanel, HistoryPanel, SavePanel, FigPanel
-from swepy.app.root_widgets import MenuBar
-from swepy.app.view_frames import ImgPanel, TopPanel, LeftPanel
-from swepy.processing import data_utils
-from swepy.processing.data import DcmData
-from swepy.processing.io import pickle_io
+from swepy_core.app import app_utils
+from swepy_core.app.output_frames import FilesPanel, HistoryPanel, SavePanel, FigPanel
+from swepy_core.app.root_widgets import MenuBar
+from swepy_core.app.view_frames import ImgPanel, TopPanel, LeftPanel
+from swepy_core.processing import data_utils
+from swepy_core.processing.data import DcmData
+from swepy_core.processing.io import pickle_io
 
 
 class View(ttk.Frame):

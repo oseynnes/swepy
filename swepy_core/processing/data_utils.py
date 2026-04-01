@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
-from swepy.processing.io.json_io import load_json, save_json
-from swepy.processing.io.pickle_io import save_pickle
+from swepy_core.processing.io.json_io import load_json, save_json
+from swepy_core.processing.io.pickle_io import save_pickle
 
 
 # warnings.simplefilter('ignore')  # Fix NumPy issues.

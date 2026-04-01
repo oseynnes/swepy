@@ -9,14 +9,14 @@ from pydicom.pixel_data_handlers.util import convert_color_space
 from skimage.draw import polygon
 
 from src.src_utils import get_project_root
-from swepy.app import app_utils
-from swepy.processing import data_utils
-from swepy.processing.data_utils import mean_lowest_stdev_subarray
+from swepy_core.app import app_utils
+from swepy_core.processing import data_utils
+from swepy_core.processing.data_utils import mean_lowest_stdev_subarray
 
 
 class DcmData:
     """Containing data from DICOM file and analysis methods"""
-
+#TODO: change colour analysis from RGB to HSB
     def __init__(self, path):
         super().__init__()
 

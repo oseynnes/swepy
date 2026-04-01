@@ -3,8 +3,8 @@ import tkinter.filedialog as fd
 from pathlib import Path
 from tkinter import ttk
 
-from swepy.processing import data_utils
-from swepy.processing.io import json_io
+from swepy_core.processing import data_utils
+from swepy_core.processing.io import json_io
 
 
 class MenuBar(tk.Menu):

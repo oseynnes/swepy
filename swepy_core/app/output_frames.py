@@ -9,10 +9,10 @@ import pandastable
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.figure import Figure
 
-from swepy.processing import data_utils
-from swepy.processing.data_utils import mean_lowest_stdev_subarray
-from swepy.processing.io.pickle_io import load_pickle
-from swepy.app.app_utils import warn_empty_cache, warn_no_selection
+from swepy_core.processing import data_utils
+from swepy_core.processing.data_utils import mean_lowest_stdev_subarray
+from swepy_core.processing.io.pickle_io import load_pickle
+from swepy_core.app.app_utils import warn_empty_cache, warn_no_selection
 
 
 class FilesPanel(ttk.LabelFrame):

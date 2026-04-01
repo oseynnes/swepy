@@ -3,8 +3,8 @@ from tkinter import ttk
 
 from PIL import ImageTk, Image
 
-from swepy.app.app_utils import warn_no_video
-from swepy.processing import data_utils
+from swepy_core.app.app_utils import warn_no_video
+from swepy_core.processing import data_utils
 
 
 class TopPanel(ttk.Frame):
