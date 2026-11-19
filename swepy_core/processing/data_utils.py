@@ -1,3 +1,5 @@
+import os
+import sys
 import webbrowser
 from pathlib import Path
 
@@ -7,34 +9,74 @@ from matplotlib.colors import LinearSegmentedColormap
 from swepy_core.processing.io.json_io import load_json, save_json
 from swepy_core.processing.io.pickle_io import save_pickle
 
+MAX_RECENT_PATHS = 10
 
-# warnings.simplefilter('ignore')  # Fix NumPy issues.
 
+def get_cache_dir():
+    """Return the folder holding swepy settings and cached results, creating it if needed.
 
-def settings_io(temp=None):
-    """Load settings from previous analyses"""
-    dir_path = Path.cwd().parent / 'src' / 'cache'
-    json_path = dir_path / 'settings.json'
-
-    if temp:
-        save_json(temp, json_path)
+    The folder is user specific and independent of where swepy is installed or launched from:
+        - Windows: %APPDATA%\\swepy
+        - macOS: ~/Library/Application Support/swepy
+        - Linux: $XDG_DATA_HOME/swepy (default ~/.local/share/swepy)
+    It can be overridden with the SWEPY_HOME environment variable.
+    """
+    if os.environ.get('SWEPY_HOME'):
+        dir_path = Path(os.environ['SWEPY_HOME'])
+    elif sys.platform.startswith('win'):
+        dir_path = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming')) / 'swepy'
+    elif sys.platform == 'darwin':
+        dir_path = Path.home() / 'Library' / 'Application Support' / 'swepy'
     else:
-        if json_path.exists():
-            temp = load_json(json_path)
-            return temp
-            # if param in temp:
-            #     return temp[param]
-        else:
-            return {}
+        dir_path = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'swepy'
+    dir_path.mkdir(parents=True, exist_ok=True)
+    return dir_path
+
+
+def get_settings_path():
+    """Return path of the JSON file containing user settings"""
+    return get_cache_dir() / 'settings.json'
+
+
+def get_cached_results_path(name):
+    """Return path of the pickle file caching the results of an analysed file
+    Args:
+        name: name of the analysed file, with or without extension
+    Returns: pathlib path to the pickle file
+    """
+    name = str(name)
+    exact = get_cache_dir() / f'{name}.pickle'
+    if exact.exists():
+        return exact
+    return get_cache_dir() / f'{Path(name).stem}.pickle'
+
+
+def load_settings():
+    """Load settings from previous analyses (empty dict if none or unreadable)"""
+    json_path = get_settings_path()
+    if not json_path.exists():
+        return {}
+    try:
+        return load_json(json_path)
+    except (OSError, ValueError):  # unreadable or corrupted settings file
+        return {}
+
+
+def save_settings(temp):
+    """Save settings dictionary to JSON file"""
+    save_json(temp, get_settings_path())
+
+
+def set_setting(param, value):
+    """Save a single parameter setting"""
+    temp = load_settings()
+    temp[param] = value
+    save_settings(temp)
 
 
 def get_settings(param):
     """Load a parameter settings from previous analyses"""
-    temp = settings_io()
-    if param in temp:
-        return temp[param]
-    else:
-        return []
+    return load_settings().get(param, [])
 
 
 def delete_settings(param=None):
@@ -43,99 +85,117 @@ def delete_settings(param=None):
         param: parameter for which settings should be deleted
     Returns: None
     """
-    temp = settings_io()
+    temp = load_settings()
     if param:
-        temp[param].clear()
+        temp[param] = []
     else:
-        for parameter in temp.values:
-            parameter.clear()
-    settings_io(temp)
-
-
-def set_settings_paths():
-    """Set path for json file containing settings"""
-    dir_path = Path.cwd().parent / 'src' / 'cache'
-    json_path = dir_path / 'settings.json'
-    return dir_path, json_path
+        for key in temp:
+            temp[key] = []
+    save_settings(temp)
 
 
 def save_path(path):
     """Add file path to a list of recent file paths, in a JSON file"""
-    dir_path, json_path = set_settings_paths()
-    if json_path.exists():
-        temp = load_json(json_path)
-        if path in temp['RECENT_PATHS']:
-            return
-    elif dir_path.exists():
-        temp = dict()
-        temp['RECENT_PATHS'] = []
-    else:
-        dir_path.mkdir()
-        temp = dict()
-        temp['RECENT_PATHS'] = []
-
-    temp['RECENT_PATHS'].insert(0, path)
-    if len(temp['RECENT_PATHS']) > 10:
-        del temp['RECENT_PATHS'][-1]
-    save_json(temp, json_path)
+    temp = load_settings()
+    recent = temp.setdefault('RECENT_PATHS', [])
+    if path in recent:
+        return
+    recent.insert(0, path)
+    del recent[MAX_RECENT_PATHS:]
+    save_settings(temp)
 
 
 def save_usr_input(fhz, scale):
     """Save SWE frequency and max. scale from colour bar"""
-    dir_path, json_path = set_settings_paths()
-    if json_path.exists():
-        temp = load_json(json_path)
-        temp['SWE_PARAM'] = [fhz, scale]
-        save_json(temp, json_path)
+    set_setting('SWE_PARAM', [fhz, scale])
 
 
 def save_roi_coords(roi_coords):
     """Save roi coordinates from 1st analysed file"""
-    dir_path, json_path = set_settings_paths()
-    if json_path.exists():
-        temp = load_json(json_path)
-        temp['ROI_COORDS'] = [roi_coords]
-        save_json(temp, json_path)
+    set_setting('ROI_COORDS', [roi_coords])
 
 
 def save_swe_var(swe_var):
     """Save SWE variable chosen by user"""
-    dir_path, json_path = set_settings_paths()
-    if json_path.exists():
-        temp = load_json(json_path)
-        temp['SWE_VAR'] = [swe_var]
-        save_json(temp, json_path)
+    set_setting('SWE_VAR', [swe_var])
 
 
 def save_cmap_source(cmap_loc):
     """Save cmap preference"""
-    dir_path, json_path = set_settings_paths()
-    if json_path.exists():
-        temp = load_json(json_path)
-        temp['CMAP_LOC'] = [cmap_loc]
-        save_json(temp, json_path)
+    set_setting('CMAP_LOC', [cmap_loc])
 
 
 def save_sat_thresh(sat_thresh):
     """Save chosen saturation level"""
-    dir_path, json_path = set_settings_paths()
-    if json_path.exists():
-        temp = load_json(json_path)
-        temp['SAT_THRESH'] = [sat_thresh]
-        save_json(temp, json_path)
+    set_setting('SAT_THRESH', [sat_thresh])
 
 
 def pickle_results(file_path, data):
     """Add analysis results to a pickle file
     Args:
-        file_path (pathlib.PosixPath): path to analysed file
+        file_path (pathlib.Path): path to analysed file
         data (dict): analysis results
     Returns: None
     """
-    dir_path = Path.cwd().parent / 'src' / 'cache'
-    pickle_path = dir_path / f'{file_path.stem}.pickle'
-
+    pickle_path = get_cache_dir() / f'{file_path.stem}.pickle'
     save_pickle(data, pickle_path)
+
+
+def find_refresh_timing(changes, nominal_period, spike_ratio=2.5, min_hit_rate=0.3):
+    """Find when SWE maps are refreshed in a cine loop.
+
+    Within the SWE box, consecutive frames are identical (apart from compression noise) until the
+    SWE map is refreshed, which produces a spike in frame-to-frame change. Candidate periods
+    (in frames) close to the nominal period, and phases, are scored by the fraction of their
+    predicted refresh positions falling on a spike. Refreshes that leave the map unchanged
+    (e.g. uniform maps) produce no spike, hence the tolerance on that fraction.
+
+    Args:
+        changes: 1D array, changes[i] = mean absolute pixel change between frames i and i+1
+        nominal_period (float): expected refresh period in frames (B-mode frame rate / SWE frequency)
+        spike_ratio (float): a change larger than spike_ratio x median change counts as a spike
+        min_hit_rate (float): minimal fraction of predicted refreshes that must fall on spikes
+    Returns: (period, first_refresh_frame), or None if no clear periodic refresh is found
+        (e.g. static or uniform SWE map)
+    """
+    changes = np.asarray(changes, dtype=float).copy()
+    if len(changes) < 4:
+        return None
+    changes[0] = np.median(changes)  # change between frames 0 and 1 is unreliable in some files
+    noise = np.median(changes)
+    spikes = changes > spike_ratio * max(noise, 1e-6)
+    if not spikes.any():
+        return None
+
+    # actual refresh periods are within a few % of nominal ones (e.g. 13 vs 12.5 frames);
+    # the search range excludes multiples of the period, which would skip maps
+    lo = max(2, int(np.floor(nominal_period * .75)))
+    hi = min(int(np.ceil(nominal_period * 1.33)), len(changes) // 2)
+    scores = {}  # period -> (hit rate, mean change at hits, phase)
+    for period in range(lo, hi + 1):
+        best = None
+        for phase in range(period):
+            hits = spikes[phase::period]
+            candidate = (hits.mean(), changes[phase::period].mean(), phase)
+            if best is None or candidate[:2] > best[:2]:
+                best = candidate
+        scores[period] = best
+    if not scores:
+        return None
+    period = max(scores, key=lambda p: scores[p][:2])
+    if scores[period][0] < min_hit_rate:
+        return None
+    return period, scores[period][2] + 1
+
+
+def select_swe_frames(n_frames, period, first_refresh):
+    """Return index of one frame per SWE map: the middle frame of each refresh interval.
+
+    Frame 0 is ignored; maps partially visible at the start and end of the clip are included.
+    """
+    refreshes = list(range(first_refresh, n_frames, period))
+    bounds = [1] + [r for r in refreshes if r > 1] + [n_frames]
+    return np.array([(start + stop - 1) // 2 for start, stop in zip(bounds[:-1], bounds[1:]) if stop > start])
 
 
 def closest_rgb(roi_rgb, color_profile_rgb):
@@ -146,17 +206,43 @@ def closest_rgb(roi_rgb, color_profile_rgb):
         color_profile_rgb: color scale array
     Returns: array of scale_height indices
     """
-    if len(roi_rgb.shape) == 3:
-        roi_rgb = roi_rgb[:, :, np.newaxis, :]
-    elif len(roi_rgb.shape) == 2:
-        roi_rgb = roi_rgb[:, np.newaxis, :]
-    else:
-        raise ValueError(f'ROI shape: {roi_rgb.shape}. Must have 2 or 3 dimensions')
+    if roi_rgb.ndim not in (2, 3, 4):
+        raise ValueError(f'ROI shape: {roi_rgb.shape}. Must have 2 to 4 dimensions (..., 3)')
     assert len(color_profile_rgb.shape) == 2, 'Color scale array must be two-dimensional (H, 3)'
-    rgb_distances = np.sqrt(np.sum((roi_rgb - color_profile_rgb) ** 2, axis=-1))
+    # Images contain few distinct colours: match each distinct colour once (much faster, less memory)
+    colours, inverse = np.unique(roi_rgb.reshape(-1, roi_rgb.shape[-1]), axis=0, return_inverse=True)
+    rgb_distances = np.sqrt(np.sum((colours[:, np.newaxis, :] - color_profile_rgb) ** 2, axis=-1))
     # indices of closest corresponding RGB value in color bar
     min_indices = rgb_distances.argmin(-1)
-    return min_indices
+    return min_indices[inverse.ravel()].reshape(roi_rgb.shape[:-1])
+
+
+def colour_positions(roi_rgb, color_profile_rgb, chunk=4096):
+    """Continuous position of each colour along the colour bar (0 = top row, n-1 = bottom row)
+
+    The colour bar is treated as a path through RGB space joining consecutive bar colours, and each
+    colour is projected onto the closest point of this path. Scanners draw SWE maps with many more
+    colours than the bar has rows (e.g. 1370 vs 110 colours in an uncompressed Mach30 export), lying
+    between bar colours: this recovers values between bar rows instead of rounding them to the nearest row.
+    Args:
+        roi_rgb: array of colours (..., 3)
+        color_profile_rgb: colour bar array (n rows, 3), top row first
+        chunk (int): number of distinct colours processed at once (limits memory use)
+    Returns: array of float positions, shape roi_rgb.shape[:-1]
+    """
+    profile = np.asarray(color_profile_rgb, dtype=float)
+    assert profile.ndim == 2, 'Color scale array must be two-dimensional (H, 3)'
+    colours, inverse = np.unique(roi_rgb.reshape(-1, roi_rgb.shape[-1]), axis=0, return_inverse=True)
+    starts, segments = profile[:-1], np.diff(profile, axis=0)
+    seg_len2 = np.maximum((segments ** 2).sum(-1), 1e-12)
+    positions = np.empty(len(colours))
+    for first in range(0, len(colours), chunk):
+        c = colours[first:first + chunk, np.newaxis, :].astype(float)
+        t = np.clip(((c - starts) * segments).sum(-1) / seg_len2, 0, 1)  # projection on each segment
+        dist = ((starts + t[..., np.newaxis] * segments - c) ** 2).sum(-1)
+        best = dist.argmin(1)
+        positions[first:first + chunk] = best + t[np.arange(len(best)), best]
+    return positions[inverse.ravel()].reshape(roi_rgb.shape[:-1])
 
 
 def convert_shear_m(mu, to_unit, decimals=4, rho=1000):
@@ -300,9 +386,7 @@ def format_str_datetime(dicom_meta):
 
 def clear_pickle():
     """Delete pickle files from cache directory"""
-    src_path = Path.cwd().parent / 'src' / 'cache'
-    paths = list(Path(src_path).rglob('*.pickle'))
-    for path in paths:
+    for path in get_cache_dir().glob('*.pickle'):
         path.unlink()
 
 
@@ -312,9 +396,9 @@ def get_compression_status(ds_value):
     return compression
 
 
-def mean_lowest_stdev_subarray(arr, return_mask=False):
+def mean_lowest_stdev_subarray(arr, return_mask=False, n=5):
     """
-    Finds the five successive values in the input array (or its row means if it's 2D) that result in the lowest
+    Finds the n (default 5) successive values in the input array (or its row means if it's 2D) that result in the lowest
     standard deviation, calculates their average, and returns a boolean mask for the selected values.
 
     Args:
@@ -328,18 +412,18 @@ def mean_lowest_stdev_subarray(arr, return_mask=False):
     Raises:
         ValueError: If the input is a 1D array with fewer than 5 elements, or any row in a 2D array has fewer than 5 elements.
     """
-    min_n_frame = 5
+    min_n_frame = n
     # Check if the input is a 2D array
     if arr.ndim == 2:
-        if arr.shape[1] < 5:
-            print(f'Video file contains less than 5 frames. Using only {arr.shape[1]} frames.')
-            min_n_frame = arr.shape[1]
+        if arr.shape[0] < n:  # rows are frames
+            print(f'Fewer than {n} values available. Using only {arr.shape[0]} frames.')
+            min_n_frame = arr.shape[0]
 
         # Compute the mean of each column to form a 1D array
         mean_array = np.nanmean(arr, axis=1)
     elif arr.ndim == 1:
-        if len(arr) < 5:
-            print(f'Video file contains less than 5 frames. Using only {len(arr)} frames.')
+        if len(arr) < n:
+            print(f'Fewer than {n} values available. Using only {len(arr)} frames.')
             min_n_frame = len(arr)
 
         mean_array = arr

@@ -3,8 +3,8 @@ import tkinter.filedialog as fd
 from pathlib import Path
 from tkinter import ttk
 
+from swepy_core.app import app_utils
 from swepy_core.processing import data_utils
-from swepy_core.processing.io import json_io
 
 
 class MenuBar(tk.Menu):
@@ -50,21 +50,15 @@ class MenuBar(tk.Menu):
         data_utils.delete_settings('RECENT_PATHS')
 
     def select_files(self):
-        # filetypes = (('DICOM files', '*.dcm'), ('All files', '*.*'))
-        # filetypes unused for now, to make files without extension selectable by default
-        temp_path = Path('..') / 'src' / 'cache' / 'settings.json'
-        initialdir = '/'
-        if temp_path.exists():
-            temp = json_io.load_json(temp_path)
-            if temp['RECENT_PATHS']:
-                initialdir = Path(temp['RECENT_PATHS'][0]).parent
-        # paths = fd.askopenfilenames(initialdir=initialdir, title="Select DICOM file(s)", filetypes=filetypes)
+        """Open file dialog and return list of selected paths (empty list if cancelled)"""
+        # NB: no file type filter, so that DICOM files without extension are selectable
+        initialdir = Path.home()
+        recent_paths = data_utils.get_settings('RECENT_PATHS')
+        if recent_paths and Path(recent_paths[0]).parent.exists():
+            initialdir = Path(recent_paths[0]).parent
         paths = fd.askopenfilenames(initialdir=initialdir, title="Select DICOM file(s)")
-        if paths:
-            self.paths = [Path(path) for path in paths]
-            return self.paths
-        else:
-            return
+        self.paths = [Path(path) for path in paths] if paths else []
+        return self.paths
 
     def open_settings(self):
         """Instantiate Settings class"""
@@ -79,28 +73,33 @@ class Settings(tk.Toplevel):
         super().__init__(parent)
 
         self.menu = parent
-        self.geometry('300x160')
         self.title('Settings')
+        self.transient(parent.app)
+        self.resizable(False, False)
+        self.configure(padx=5, pady=5)
+        self.protocol('WM_DELETE_WINDOW', self.close)
+        self.last_valid_thresh = self.menu.app.data.sat_thresh_var.get()
 
         # user entry for % of max scale above which pixels will be quantified as saturated
         # implementation based on https://stackoverflow.com/a/43826075/13147488
-        self.sat_frame = ttk.LabelFrame(self, text='Pixel saturation threshold (% of max scale)')
+        self.sat_frame = ttk.LabelFrame(self, text='Pixel saturation threshold (% of max scale)', padding=5)
         self.sat_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
         self.usr_entry = ttk.Entry(self.sat_frame,
+                                   width=6,
                                    textvariable=self.menu.app.data.sat_thresh_var,
                                    validate='key',
                                    validatecommand=(self.sat_frame.register(self.is_number), '%P'))
-        self.usr_entry.grid()
+        self.usr_entry.grid(row=0, column=0, padx=(0, 10))
         self.current_value = ttk.Label(self.sat_frame, text=f'threshold: {self.menu.app.data.sat_thresh_var.get()}%')
-        self.current_value.grid(row=0, column=1)
+        self.current_value.grid(row=0, column=1, sticky=tk.W)
         self.current_value.bind('<<UpdateNeeded>>', self.update_current_value)
 
         # user entry for origin of colour map to use for scaling
         # The external map is a standard colour scale ('Jet') from ElastoGUI programme
-        self.cmap_frame = ttk.LabelFrame(self, text='Source of colour map')
+        self.cmap_frame = ttk.LabelFrame(self, text='Source of colour map', padding=5)
         self.cmap_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
         self.cmap_labels = {'local_cmap': 'From image',
-                            'external_cmap': 'From standard reference'}
+                            'external_cmap': 'Standard reference (experimental)'}
         grid_column = 0
         for key, label in self.cmap_labels.items():
             radio = ttk.Radiobutton(self.cmap_frame,
@@ -109,28 +108,36 @@ class Settings(tk.Toplevel):
                                     variable=self.menu.app.view.cmap_loc_var,
                                     command=lambda: self.log_cmap_loc())
 
-            radio.grid(column=grid_column, row=0, ipadx=5, ipady=5)
+            radio.grid(column=grid_column, row=0, padx=(0, 10), pady=2)
             grid_column += 1
 
-        self.close_btn = ttk.Button(self, text='Close', command=self.destroy)
+        self.close_btn = ttk.Button(self, text='Close', command=self.close)
         self.close_btn.grid(column=0, row=2, sticky=tk.E, padx=5, pady=5)
 
+        app_utils.center_window(self, parent.app)
+
     def is_number(self, value):
+        if value == '':  # allow clearing the field while typing a new value
+            return True
         try:
             int(value)
-            # print('value:', value)
         except ValueError:
             return False
+        self.last_valid_thresh = int(value)
         self.current_value.event_generate('<<UpdateNeeded>>', when='tail')
         data_utils.save_sat_thresh(value)
         return True
 
+    def close(self):
+        """Restore last valid threshold if the entry was left empty, then close window"""
+        if self.usr_entry.get() == '':
+            self.menu.app.data.sat_thresh_var.set(self.last_valid_thresh)
+        self.destroy()
+
     def update_current_value(self, event):
         w = event.widget
-        # number = int(self.usr_entry.get())
-        number = int(self.menu.app.data.sat_thresh_var.get())
+        number = self.last_valid_thresh
         w['text'] = f'threshold: {number}%'
 
     def log_cmap_loc(self):
         data_utils.save_cmap_source(self.menu.app.view.cmap_loc_var.get())
-        print(self.menu.app.view.cmap_loc_var.get())

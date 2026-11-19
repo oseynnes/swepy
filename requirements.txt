@@ -1,14 +1,12 @@
+# Runtime dependencies of swepy (kept in sync with pyproject.toml).
+# Installing with `pip install .` is preferred: it installs these automatically.
 numpy
-pillow
-pydicom
-python-gdcm
-# pylibjpeg
-pandas
-pandastable
-matplotlib
-scikit-image
-# future
-scikit-learn
 scipy
-seaborn
-detecta
+pandas
+matplotlib>=3.5
+pydicom>=2.2
+python-gdcm
+Pillow
+scikit-image
+pandastable
+openpyxl

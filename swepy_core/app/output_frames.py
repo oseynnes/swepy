@@ -2,6 +2,7 @@ import tkinter as tk
 import tkinter.filedialog as fd
 from pathlib import Path
 from tkinter import ttk
+from tkinter.messagebox import showerror, showinfo
 
 import numpy as np
 import pandas as pd
@@ -9,10 +10,46 @@ import pandastable
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.figure import Figure
 
-from swepy_core.processing import data_utils
-from swepy_core.processing.data_utils import mean_lowest_stdev_subarray
-from swepy_core.processing.io.pickle_io import load_pickle
-from swepy_core.app.app_utils import warn_empty_cache, warn_no_selection
+from swepy_core.processing import data_utils, summary
+from swepy_core.processing.io.pickle_io import load_pickle, save_pickle
+from swepy_core.app.app_utils import get_ui_scale, text_width, warn_empty_cache, warn_no_selection
+from swepy_core.app.value_map import ValueMapWindow
+
+
+HIGHLIGHT = 'FFF2CC'  # Excel fill colour of the main result
+
+
+def main_result_names(results):
+    """Names of summary rows and per-map columns holding the main result of a recording"""
+    measured = summary.measured_var(results)
+    rows = ['main_result', 'main_result_description']
+    columns = [f'{measured}_median'] if measured else []
+    return rows, columns
+
+
+def highlight_excel(sheet, df, names, by_rows=False, index_col=False):
+    """Highlight the main result in an exported Excel sheet (bold, coloured)
+    Args:
+        sheet: openpyxl worksheet the table df was written to (header in row 1)
+        df: written table
+        names (list): names of rows (first column) or columns to highlight
+        by_rows (bool): highlight rows whose first cell is in names, else columns named in names
+        index_col (bool): whether the sheet starts with an index column
+    """
+    from openpyxl.styles import Font, PatternFill
+    fill, bold = PatternFill('solid', start_color=HIGHLIGHT), Font(bold=True)
+    if by_rows:
+        for row, name in enumerate(df.iloc[:, 0], start=2):
+            if name in names:
+                for col in range(1, df.shape[1] + 1):
+                    sheet.cell(row=row, column=col).fill = fill
+                    sheet.cell(row=row, column=col).font = bold
+    else:
+        for col, name in enumerate(df.columns, start=2 if index_col else 1):
+            if name in names:
+                for row in range(1, df.shape[0] + 2):
+                    sheet.cell(row=row, column=col).fill = fill
+                sheet.cell(row=1, column=col).font = bold
 
 
 class FilesPanel(ttk.LabelFrame):
@@ -21,17 +58,18 @@ class FilesPanel(ttk.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.config(text='Analysed files')
-        self.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NW)
+        self.config(text='Analysed files', padding=5)
+        self.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NSEW)
 
         columns = ('file_name', 'path')
-        self.tv = ttk.Treeview(self, columns=columns, show='headings')
-        self.tv.heading('file_name', text='File')
-        self.tv.column('file_name', minwidth=100)
+        self.tv = ttk.Treeview(self, columns=columns, show='headings', height=3)
+        self.tv.heading('file_name', text='File', anchor=tk.W)
+        self.tv.column('file_name', width=text_width('C0000000.dcm'), minwidth=60, stretch=False)
         self.tv.heading('path', text='Path', anchor=tk.W)
-        self.tv.column('path', minwidth=500)
-        self.tv.pack(ipadx=5, ipady=5, fill=tk.BOTH, expand=True)
-        self.add_scrollbars()
+        # path column scrolls horizontally rather than forcing a very wide window
+        self.tv.column('path', width=text_width('x' * 30), minwidth=100, stretch=True)
+        self.add_scrollbars()  # NB: scrollbars packed first, so they are never squeezed out
+        self.tv.pack(fill=tk.BOTH, expand=True)
 
     def add_scrollbars(self):
         self.sb_x = ttk.Scrollbar(self, orient=tk.HORIZONTAL, command=self.tv.xview)
@@ -45,6 +83,8 @@ class FilesPanel(ttk.LabelFrame):
         cached = [load_pickle(path) for path in paths]
         rows = [results['file'] for results in cached]
         for row in rows:
+            if self.tv.exists(row[0]):  # already listed
+                continue
             self.tv.insert('', tk.END, values=row, iid=row[0])
 
     def clear_treeview(self):
@@ -60,8 +100,9 @@ class HistoryPanel(ttk.LabelFrame):
 
         self.output = parent
 
-        self.config(text='Previous results')
+        self.config(text='Previous results', padding=5)
         self.grid(row=1, column=0, padx=5, pady=5, sticky=tk.EW)
+        self.columnconfigure(1, weight=1)
 
         self.load_btn = ttk.Button(self, text='Load')
         self.load_btn.grid(column=0, row=0, sticky=tk.W, padx=5, pady=5)
@@ -73,7 +114,7 @@ class HistoryPanel(ttk.LabelFrame):
     def select_cached():
         """Retrieve cached results files if there are any"""
         filetypes = (('Cached files', '*.pickle'),)
-        initialdir = Path.cwd().parent / 'src' / 'cache'
+        initialdir = data_utils.get_cache_dir()
         paths = fd.askopenfilenames(initialdir=initialdir, title="Select file(s)", filetypes=filetypes)
         if paths:
             return paths
@@ -90,7 +131,7 @@ class SavePanel(ttk.LabelFrame):
 
         self.output = parent
 
-        self.config(text='Save selection to')
+        self.config(text='Save selection to', padding=5)
         self.grid(row=2, column=0, padx=5, pady=5, sticky=tk.EW)
 
         self.csv_btn = ttk.Button(self, text='CSV')
@@ -103,32 +144,130 @@ class SavePanel(ttk.LabelFrame):
         self.xlsx_btn['command'] = lambda: self.export('xlsx',
                                                        list(self.output.tv_selection),
                                                        everything=False)
+        self.combine_btn = ttk.Button(self, text='Combine selection...', command=self.export_combined)
+        self.combine_btn.grid(column=0, row=1, columnspan=2, sticky=tk.W, padx=5, pady=(0, 5))
 
     def export(self, file_format, selection=None, everything=True):
-        """Export stats for each unique SWE frame
+        """Export summary and per-map statistics of each analysed file, next to the DICOM file
+        (Excel: one file with 'summary' and 'per_map' sheets; CSV: <name>.csv and <name>_summary.csv)
         Args:
             file_format (str): extension of exported file (currently csv and xlsx)
             selection (list): rows selected in treeview
-            everything:
+            everything (bool): export all analysed files rather than the selection
         Returns: None
         """
         all_rows = [self.output.files_panel.tv.item(child)['values']
                     for child in self.output.files_panel.tv.get_children()]
         rows = all_rows if everything else selection
-        if rows:
-            for row in rows:
-                name = row[0].split('.')[0]
-                import_path = Path.cwd().parent / 'src' / 'cache' / f'{name}.pickle'
-                results = load_pickle(import_path)
-                export_path = Path(row[1]) / f'{name}.{file_format}'  # TODO: make results folder if it does not exists
-                dfs = pd.DataFrame.from_dict(results['stats'])
-                if file_format == 'csv':
-                    dfs.to_csv(export_path, index_label='frame')
-                if file_format == 'xlsx':
-                    dfs.to_excel(export_path, index_label='frame')
-        else:
+        if not rows:
             warn_no_selection()
             return
+        exported = []
+        for row in rows:
+            import_path = data_utils.get_cached_results_path(row[0])
+            name = import_path.stem
+            results = load_pickle(import_path)
+            per_map = summary.per_map_table(results)
+            summary_df = summary.summary_table(results)
+            export_path = Path(row[1]) / f'{name}.{file_format}'
+            if file_format == 'csv':
+                per_map.to_csv(export_path, index_label='map')
+                summary_df.to_csv(Path(row[1]) / f'{name}_summary.csv', index=False)
+            if file_format == 'xlsx':
+                with pd.ExcelWriter(export_path, engine='openpyxl') as writer:
+                    summary_df.to_excel(writer, sheet_name='summary', index=False)
+                    per_map.to_excel(writer, sheet_name='per_map', index_label='map')
+                    rows, columns = main_result_names(results)
+                    highlight_excel(writer.sheets['summary'], summary_df, rows, by_rows=True)
+                    highlight_excel(writer.sheets['per_map'], per_map, columns, index_col=True)
+            exported.append(export_path.name)
+        showinfo(title='Export', message=f'Exported {len(exported)} file(s), next to the DICOM files:\n'
+                                         + '\n'.join(exported))
+
+    def export_combined(self):
+        """Export one table combining the summaries of the selected files (e.g. repeated acquisitions
+        of one condition), with mean, SD and CV% between files"""
+        tv = self.output.files_panel.tv
+        rows = [tv.item(item)['values'] for item in tv.selection()]
+        if not rows:
+            warn_no_selection()
+            return
+        path = fd.asksaveasfilename(title='Save combined summary',
+                                    initialdir=Path(rows[0][1]),
+                                    initialfile='combined_summary.xlsx',
+                                    defaultextension='.xlsx',
+                                    filetypes=(('Excel', '*.xlsx'), ('CSV', '*.csv')))
+        if not path:
+            return
+        results = [load_pickle(data_utils.get_cached_results_path(row[0])) for row in rows]
+        combined = summary.combine(results)
+        if Path(path).suffix.lower() == '.csv':
+            combined.to_csv(path, index=False)
+        else:
+            with pd.ExcelWriter(path, engine='openpyxl') as writer:
+                combined.to_excel(writer, index=False, sheet_name='combined')
+                highlight_excel(writer.sheets['combined'], combined, ['main_result', 'main_result_description'])
+
+
+class QualityPanel(ttk.LabelFrame):
+    """Panel of output tab to set quality filters, and re-apply them to all analysed files"""
+
+    labels = {'max_void_pct': 'Max. void pixels (% of ROI)',
+              'max_saturated_pct': 'Max. saturated pixels (% of ROI)',
+              'ignore_first_s': 'Ignore maps in the first (s)'}
+
+    def __init__(self, parent):
+        super().__init__(parent, text='Quality filters (per SWE map)', padding=5)
+
+        self.output = parent
+        self.grid(row=3, column=0, padx=5, pady=5, sticky=tk.EW)
+        self.columnconfigure(0, weight=1)
+
+        quality = summary.get_quality_settings()
+        validate = (self.register(self.is_positive_number), '%P')
+        self.vars = {}
+        for row, (key, label) in enumerate(self.labels.items()):
+            ttk.Label(self, text=label).grid(row=row, column=0, sticky=tk.W, pady=1)
+            var = tk.StringVar(value=f'{quality[key]:g}')
+            ttk.Entry(self, width=6, textvariable=var, validate='key',
+                      validatecommand=validate).grid(row=row, column=1, sticky=tk.E, pady=1)
+            self.vars[key] = var
+        self.defaults_btn = ttk.Button(self, text='Defaults', command=self.reset_defaults)
+        self.defaults_btn.grid(row=3, column=0, sticky=tk.W, pady=(5, 0))
+        self.apply_btn = ttk.Button(self, text='Apply', command=self.apply)
+        self.apply_btn.grid(row=3, column=1, sticky=tk.E, pady=(5, 0))
+
+    @staticmethod
+    def is_positive_number(value):
+        """Validate entry of a positive number (empty allowed while typing)"""
+        if value == '':
+            return True
+        try:
+            return float(value) >= 0
+        except ValueError:
+            return False
+
+    def reset_defaults(self):
+        for key, var in self.vars.items():
+            var.set(f'{summary.DEFAULT_QUALITY[key]:g}')
+
+    def apply(self):
+        """Save filters, and re-apply them to all analysed files (and to future analyses)"""
+        try:
+            quality = {key: float(var.get()) for key, var in self.vars.items()}
+        except ValueError:
+            showerror(title='Wrong input', message='Please enter a number in each quality filter field')
+            return
+        for key, value in quality.items():
+            data_utils.set_setting(key.upper(), [value])
+        tv = self.output.files_panel.tv
+        for item in tv.get_children():
+            path = data_utils.get_cached_results_path(tv.item(item)['values'][0])
+            if path.exists():
+                save_pickle(summary.apply_quality(load_pickle(path), quality), path)
+        if self.output.results:
+            summary.apply_quality(self.output.results, quality)
+            self.output.fig_panel.change_plot()
 
 
 class FigPanel(ttk.Frame):
@@ -139,117 +278,155 @@ class FigPanel(ttk.Frame):
 
         self.output = parent
 
-        self.grid(row=0, column=1, rowspan=5, padx=5, pady=5, sticky=tk.NSEW)
+        self.grid(row=0, column=1, rowspan=6, padx=5, pady=5, sticky=tk.NSEW)
 
-        self.lf0 = ttk.LabelFrame(self, text='Preview')
-        self.lf0.pack(ipadx=5, ipady=5, fill=tk.X)
-        self.figure = Figure()
+        # Plot controls go in the left column of the Results tab (under the save buttons),
+        # so the figure can use all the remaining space and shrink on small screens
+        self.lf1 = ttk.LabelFrame(self.output, text='Variable', padding=5)
+        self.lf1.grid(row=4, column=0, padx=5, pady=5, sticky=tk.EW)
+        self.results_btn_frame = ttk.Frame(self.output)
+        self.results_btn_frame.grid(row=5, column=0, padx=5, pady=5, sticky=tk.EW)
+
+        self.lf0 = ttk.LabelFrame(self, text='Preview', padding=5)
+        self.lf0.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        # match figure resolution to display scaling, so plot text is readable on HiDPI screens
+        self.figure = Figure(figsize=(6, 4), dpi=100 * get_ui_scale(self), layout='constrained')
         self.figure_canvas = FigureCanvasTkAgg(self.figure, self.lf0)
         NavigationToolbar2Tk(self.figure_canvas, self.lf0)
         self.figure_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-        self.lf1 = ttk.LabelFrame(self, text='Variable', labelanchor='w')
-        self.lf1.pack(ipadx=5, ipady=5, fill=tk.X)
         self.plot_swe_var = tk.StringVar()
         self.plot_swe_var.set('youngs_m')
         self.y_labels = {'velocity': 'Wave velocity (m/s)',
-                         'shear_m': 'Shear modulus (KPa)',
-                         'youngs_m': "Young's modulus (KPa"}
-        grid_column = 0
+                         'shear_m': 'Shear modulus (kPa)',
+                         'youngs_m': "Young's modulus (kPa)"}
+        grid_row = 0
         for key, label in self.y_labels.items():
             radio = ttk.Radiobutton(self.lf1,
                                     text=label,
                                     value=key,
                                     command=self.change_plot,
                                     variable=self.plot_swe_var)
-            radio.grid(column=grid_column, row=0, ipadx=10, ipady=10)
-            grid_column += 1
+            radio.grid(column=0, row=grid_row, sticky=tk.W, pady=2)
+            grid_row += 1
 
-        self.results_btn_frame = ttk.Frame(self)
-        self.results_btn_frame.pack()
         self.results_btn = ttk.Button(self.results_btn_frame, text='Display in table', command=self.display_results)
-        self.results_btn.grid(row=0, column=1, padx=5, pady=5, sticky=tk.NSEW)
-
-        # TODO: Add figure with colour analysis
+        self.results_btn.grid(row=0, column=0, padx=5, sticky=tk.W)
+        self.map_btn = ttk.Button(self.results_btn_frame, text='Value map', command=self.show_value_map)
+        self.map_btn.grid(row=0, column=1, padx=5, sticky=tk.W)
 
     def change_plot(self):
         """Load results and call function to refresh plot"""
         if self.output.results is None:
             return
-        D = self.output.results['raw'][self.plot_swe_var.get()]
-        self.replot_data(D, self.plot_swe_var.get())
+        self.replot_data(self.output.results, self.plot_swe_var.get())
 
-    def replot_data(self, D, swe_var):
-        """Reset app to plot new data
+    def replot_data(self, results, swe_var):
+        """Plot distribution of values in each SWE map, highlighting per-map medians
         Args:
-            D: data 3D array of shape (n frames, height, width).
-            swe_var: variable to calculate, can only be either 'velocity', 'shear_m' or 'youngs_m'
+            results (dict): analysis results
+            swe_var: variable to plot, can only be either 'velocity', 'shear_m' or 'youngs_m'
         Returns: None
         """
-
-        swe_vars = ['velocity', 'shear_m', 'youngs_m']
-        assert (swe_var in swe_vars), "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
-        # self.plot_swe_var.set(swe_var)
-        frame_dim = D.shape[0]
-        plot_data = D.reshape(frame_dim, -1)
+        assert swe_var in summary.SWE_VARS, "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
+        values = results['raw'][swe_var]
+        n_maps = values.shape[0]
+        included = np.asarray(results['stats'].get('included', np.ones(n_maps, dtype=bool)), dtype=bool)
+        medians = summary.per_map_stats(values)['median']
+        summ = summary.summarise(results)
+        unit = summary.UNITS[swe_var]
 
         self.figure.clear()
         axes = self.figure.add_subplot()
-        if np.nanmean(D) > 0:
-            data_lists = [x for x in plot_data.tolist()]
-            filtered_lists = data_utils.filter_nans(data_lists)
-            vp = axes.violinplot(filtered_lists,
-                                 widths=1,
-                                 showmeans=True,
-                                 showmedians=True,
-                                 showextrema=False)
-
-            for body in vp['bodies']:
-                body.set_facecolor('navy')
-                body.set_alpha(.5)
+        data = data_utils.filter_nans(values.tolist())
+        positions = [i + 1 for i, v in enumerate(data) if len(v)]
+        if positions:
+            vp = axes.violinplot([data[p - 1] for p in positions], positions=positions, widths=.9,
+                                 showmeans=False, showmedians=False, showextrema=False)
+            for position, body in zip(positions, vp['bodies']):
+                body.set_facecolor('navy' if included[position - 1] else 'lightgrey')
                 body.set_edgecolor('#473535')
+                body.set_alpha(.5)
+            x = np.arange(1, n_maps + 1)
+            axes.scatter(x[included], medians[included], s=25, c='orange', zorder=3, label='map median')
+            if (~included).any():
+                axes.scatter(x[~included], medians[~included], s=25, c='grey', marker='x', zorder=3,
+                             label='excluded map')
+            mean_of_medians = summ[f'{swe_var}_mean_of_map_medians']
+            if np.isfinite(mean_of_medians):
+                axes.axhline(mean_of_medians, color='orange', ls='--', lw=1, label='mean of medians')
+            axes.legend(fontsize='small', loc='upper right')
+        axes.set_xlabel('SWE map')
+        axes.set_ylabel(self.y_labels[swe_var])
 
-            vp['cmeans'].set_color('orange')
-            vp['cmedians'].set_color('white')
-
-            std = np.nanstd(D, axis=1)
-            xy = [[l.vertices[:, 0].mean(), l.vertices[0, 1]] for l in vp['cmeans'].get_paths()]
-            xy = np.array(xy)
-            axes.scatter(xy[:, 0], xy[:, 1], s=20, c="orange", marker="o", zorder=3)
-            axes.vlines(xy[:, 0],
-                        ymin=xy[:, 1] - std,
-                        ymax=xy[:, 1] + std,
-                        color='#473535',
-                        lw=3,
-                        zorder=1)
-
-            axes.set_xlabel('SWE frames')
-            axes.set_ylabel(self.y_labels[swe_var])
-            axes.set_title(f"{self.output.results['file'][0]}, "
-                           f"Median: {round(np.nanmedian(D), 2)}, "
-                           f"Mean: {round(np.nanmean(D), 2)}, "
-                           f"Mean_low_stdev: {round(mean_lowest_stdev_subarray(D), 2)}, "
-                           f"STD: {round(np.nanstd(D), 2)}")
-
+        title = f"{results['file'][0]}\n"
+        if summ['n_maps_included']:
+            title += (f"Mean of map medians: {summ[f'{swe_var}_mean_of_map_medians']:.2f} {unit}  "
+                      f"(SD between maps {summ[f'{swe_var}_SD_between_maps']:.2f}, "
+                      f"CV {summ[f'{swe_var}_CV%_between_maps']:.1f}%)  |  "
+                      f"{summ['n_maps_included']}/{summ['n_maps']} maps")
+        else:
+            title += 'No map passed the quality filters'
+        axes.set_title(title, fontsize='medium')
+        if summ.get('scale_warning'):
+            axes.text(.01, .98, f"Scale too coarse for this tissue: median colour level "
+                                f"{summ['median_colour_level']:.0f} of {summ['colour_levels_in_scale']}.\n"
+                                f"Use a lower max. scale on the scanner.",
+                      transform=axes.transAxes, va='top', fontsize='small', color='firebrick')
         self.figure_canvas.draw_idle()
 
     def clear_figure(self):
-        for widget in self.lf0.winfo_children():
-            widget.destroy()
+        """Remove plot from preview (keeps figure and toolbar usable for the next analysis)"""
+        self.figure.clear()
+        self.figure_canvas.draw_idle()
 
     def display_results(self):
-        """Display results in a popup table"""
+        """Display summary and per-map results in a popup window with two tables"""
         # adapted from https://stackoverflow.com/a/71827719/13147488
-        if not self.output.results:
+        results = self.output.results
+        if not results:
             return
-        else:
-            res_dict = self.output.results['stats']
-            df = pd.DataFrame.from_dict(res_dict)
-        table_frame = tk.Toplevel(self)
-        table_frame.title(self.output.results['file'][0])
+        window = tk.Toplevel(self)
+        window.title(results['file'][0])
         root_x, root_y = self.winfo_rootx(), self.winfo_rooty()
-        offset_w = int(self.winfo_width())
-        table_frame.geometry(f'+{root_x + offset_w}+{root_y}')
-        tk.Label(table_frame, text="Results").grid(row=0, column=1, columnspan=3)
-        table = pandastable.Table(table_frame, dataframe=df)
-        table.show()
+        # place table next to the figure, but keep it on screen
+        x = min(root_x + int(self.winfo_width()), max(0, self.winfo_screenwidth() - 700))
+        window.geometry(f'+{x}+{root_y}')
+        notebook = ttk.Notebook(window)
+        notebook.pack(fill=tk.BOTH, expand=True)
+        rows, columns = main_result_names(results)
+        for name, df in (('Summary', summary.summary_table(results).astype({'value': str})),
+                         ('Per map', summary.per_map_table(results))):
+            frame = ttk.Frame(notebook)
+            notebook.add(frame, text=name)
+            table = pandastable.Table(frame, dataframe=df)
+            table.show()
+            try:  # highlight main result (rows of the summary, median column of the per-map table)
+                if name == 'Summary':
+                    table.setRowColors(rows=[i for i, p in enumerate(df['parameter']) if p in rows],
+                                       clr='#' + HIGHLIGHT, cols='all')
+                else:
+                    for col in [df.columns.get_loc(c) for c in columns if c in df.columns]:
+                        table.setRowColors(rows=list(range(len(df))), clr='#' + HIGHLIGHT, cols=[col])
+                table.redraw()
+            except Exception:  # cosmetic only (pandastable API varies between versions)
+                pass
+
+    def show_value_map(self):
+        """Display values of the analysed ROI as maps, one per SWE map"""
+        results = self.output.results
+        if not results:
+            return
+        swe_var = self.plot_swe_var.get()
+        built = summary.value_maps(results, swe_var)
+        if built is None:
+            showinfo(title='Value map', message='Not available for results cached by an earlier version '
+                                                'of swepy. Analyse the file again.')
+            return
+        maps, x0, y0 = built
+        stats = results['stats']
+        frames = stats.get('dicom_frame', np.arange(1, len(maps) + 1))
+        included = stats.get('included', np.ones(len(maps), dtype=bool))
+        info = [f'DICOM frame {f}' + ('' if ok else '  (excluded)') for f, ok in zip(frames, included)]
+        ValueMapWindow(self, maps, x0, y0, f'{summary.LABELS[swe_var]} ({summary.UNITS[swe_var]})',
+                       f"{results['file'][0]}: ROI values", map_info=info)

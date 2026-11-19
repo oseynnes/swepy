@@ -1,6 +1,3 @@
-# swepy_core/__init__.py
+"""swepy: analysis of shear wave elastography (SWE) DICOM cine loops."""
 
-from . import app
-from . import processing
-
-__version__ = "0.1.0"
+__version__ = "0.3.0"

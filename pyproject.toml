@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swepy"
+version = "0.3.0"
+description = "Graphical tool to analyse shear wave elastography (SWE) DICOM cine loops"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Olivier Seynnes" }]
+requires-python = ">=3.9"
+keywords = ["elastography", "shear wave", "ultrasound", "DICOM", "supersonic"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "matplotlib>=3.5",
+  "pydicom>=2.2",
+  "python-gdcm",      # decodes JPEG-compressed DICOM files (lossy and lossless)
+  "Pillow",
+  "scikit-image",
+  "pandastable",
+  "openpyxl",         # Excel export
+]
+
+[project.urls]
+Homepage = "https://github.com/oseynnes/swepy"
+Issues = "https://github.com/oseynnes/swepy/issues"
+
+[project.scripts]
+swepy = "swepy_core.start:main"
+
+[tool.setuptools.packages.find]
+include = ["swepy_core*"]
+
+[tool.setuptools.package-data]
+swepy_core = ["resources/*.mat"]

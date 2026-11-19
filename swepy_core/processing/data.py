@@ -1,17 +1,19 @@
 import tkinter
 from pathlib import Path
 
-import detecta
 import numpy as np
 import scipy.io as sio
 from pydicom import dcmread
-from pydicom.pixel_data_handlers.util import convert_color_space
 from skimage.draw import polygon
 
-from src.src_utils import get_project_root
-from swepy_core.app import app_utils
-from swepy_core.processing import data_utils
-from swepy_core.processing.data_utils import mean_lowest_stdev_subarray
+import swepy_core
+from swepy_core.processing import data_utils, summary
+
+CMAP_PATH = Path(__file__).resolve().parent.parent / 'resources' / 'colormap.mat'
+
+
+class NoSWEDataError(Exception):
+    """Raised when the ROI contains no elastography (coloured) pixels in any frame"""
 
 
 class DcmData:
@@ -28,10 +30,17 @@ class DcmData:
         self.swe = None  # SWE box
         self.bot_fov = None  # bottom field of view
         self.swe_array = None
+        self.swe_indices = None  # indices of the DICOM frames retained (one per SWE map)
+        self.resampling = None  # how SWE maps were detected (for traceability)
         self.roi_coords = None
         self.roi_shape = None
         self.top_fov_coords = None
+        self.fov_y_offset = None  # vertical distance between top and bottom fields of view
         self.bmode_fhz = None
+        self.frame_time_ms = None
+        self.pixel_xy = None  # (x, y) image coordinates of ROI pixels
+        self.colour_indices = None  # position of each ROI pixel along the colour bar (0 = top, float)
+        self.cmap_loc = None
         self.swe_fhz = None
         self.max_scale = None
         if tkinter._default_root is not None:
@@ -56,7 +65,7 @@ class DcmData:
             self.img_name = self.path.name
 
     def define_rois(self):
-        rois = self.ds.SequenceOfUltrasoundRegions._list
+        rois = list(self.ds.SequenceOfUltrasoundRegions)
         if len(rois) < 3:
             raise IndexError('The current image may not contain SWE data.')
         self.top_fov = rois[0]  # top field of view
@@ -79,8 +88,16 @@ class DcmData:
         self.ds = dcmread(self.path)
         self.define_rois()
         self.roi_coords = self.get_roi_coord(self.swe)
-        self.top_fov_coords = self.get_roi_coord(self.top_fov)
-        self.bmode_fhz = float(self.ds.RecommendedDisplayFrameRate)
+        self.top_fov_coords = self.get_roi_coord(self.top_fov, offset=0)
+        self.fov_y_offset = self.bot_fov.RegionLocationMinY0 - self.top_fov.RegionLocationMinY0
+        # FrameTime (ms) gives the actual frame interval of the stored loop. On Mach30 exports
+        # (FrameTime 50 ms) it matches observed SWE refresh periods, while RecommendedDisplayFrameRate
+        # (19 Hz) does not.
+        if self.ds.get('FrameTime'):
+            self.bmode_fhz = 1000 / float(self.ds.FrameTime)
+        else:
+            self.bmode_fhz = float(self.ds.RecommendedDisplayFrameRate)
+        self.frame_time_ms = 1000 / self.bmode_fhz
         img_array_raw = self.ds.pixel_array
         # if (0x0008, 0x2111) in self.ds and 'Lossy' in self.ds[
         #     0x0008, 0x2111].value:  # check if there was lossy compression
@@ -89,32 +106,34 @@ class DcmData:
         #     self.img_array = img_array_raw
         self.img_array = img_array_raw  # disabled above code 20250117 as it no longer seemed required
 
-    def detect_unique_swe(self):
-        """Retrieve indices of frames with unique SWE ROI"""
-        all_rois = self.get_rois(self.img_array)
-        mean_colour = all_rois.mean(axis=(1, 2))
-        colour_shifts = np.diff(mean_colour)
-        indices = detecta.detect_peaks(x=abs(colour_shifts),
-                                       # mph=np.std(colour_shifts) * 0.1,
-                                       edge='both',
-                                       show=False)
-        # indices = np.where(abs(colour_shifts) > 0.04)[0] + 1  # used 0.024 in files from Aixplorer
-        return indices
+    def swe_box_changes(self):
+        """Mean absolute pixel change between consecutive frames, within the SWE box"""
+        (x0, y0), (x1, y1) = self.get_roi_coord(self.swe)
+        box = self.img_array[:, y0:y1, x0:x1, :].astype(np.int16)
+        return np.abs(np.diff(box, axis=0)).mean(axis=(1, 2, 3))
 
     def resample(self, swe_fhz=1.0):
-        """resample scan sequence to only retain 1st scans with unique SWE data"""
-        unique_swes = self.detect_unique_swe()
-        if self.bmode_fhz % swe_fhz == 0:
-            frame_step = int(self.bmode_fhz // swe_fhz)
-        else:
-            frame_step = int(self.bmode_fhz // swe_fhz + 1)
+        """Resample scan sequence to retain one frame per SWE map (the middle frame of each map)
 
-        # NB: 2nd frame comes at indices between 1 and 5
-        first_updated_frame = unique_swes[0] if unique_swes[0] < frame_step else frame_step + 1
-        swe_indices = np.arange(start=first_updated_frame, stop=self.img_array.shape[0],
-                                step=frame_step)  # only works for sequences!
-        # swe_indices = np.insert(swe_indices, 0, 0)
-        self.swe_array = self.img_array[swe_indices, :, :]
+        SWE map refreshes are detected from the images. The SWE frequency entered by the user is only
+        used as a starting estimate, since actual refresh rates differ slightly from nominal ones.
+        """
+        n_frames = self.img_array.shape[0]
+        nominal_period = self.bmode_fhz / swe_fhz
+        timing = data_utils.find_refresh_timing(self.swe_box_changes(), nominal_period)
+        if timing:
+            period, first_refresh = timing
+            method = 'detected'
+        else:  # no visible refresh (e.g. static map): fall back to nominal frequency
+            period, first_refresh = int(np.ceil(nominal_period)), 1
+            method = 'nominal'
+            print(f'{self.img_name}: SWE refreshes not detected, using nominal period of {period} frames')
+        self.swe_indices = data_utils.select_swe_frames(n_frames, period, first_refresh)
+        self.resampling = {'method': method,
+                           'period_frames': period,
+                           'nominal_period_frames': round(nominal_period, 2),
+                           'frame_rate': round(self.bmode_fhz, 2)}
+        self.swe_array = self.img_array[self.swe_indices, :, :]
         return self.swe_array
 
     def get_rois(self, img_arr):
@@ -127,6 +146,7 @@ class DcmData:
             coords = data_utils.rect_polygonise(self.roi_coords)
         coords_arr = np.asarray(coords)
         rr, cc = polygon(coords_arr[:, 0], coords_arr[:, 1])
+        self.pixel_xy = (rr.astype(np.int16), cc.astype(np.int16))
         return img_arr[:, cc, rr, :]
 
     def calc_pixel_percent(self, target):
@@ -143,13 +163,16 @@ class DcmData:
             threshold (int): user defined threshold of cumulative difference between channels
         Returns: mask of void pixels
         """
+        return self.colour_mask(self.rois)
+
+    def colour_mask(self, arr):
+        """Return mask of coloured (non-void) pixels of an RGB image array (..., 3)"""
         # assign threshold to max value (3*255) if it is None
         threshold = self.void_threshold if isinstance(self.void_threshold, int) else 765
-        arr = np.copy(self.rois)
         # NB: important to convert channel values to float before calculations
-        r = arr[:, :, 0].astype(np.float32)
-        g = arr[:, :, 1].astype(np.float32)
-        b = arr[:, :, 2].astype(np.float32)
+        r = arr[..., 0].astype(np.float32)
+        g = arr[..., 1].astype(np.float32)
+        b = arr[..., 2].astype(np.float32)
         rg_diff = np.abs(np.subtract(r, g))
         rb_diff = np.abs(np.subtract(r, b))
         gb_diff = np.abs(np.subtract(g, b))
@@ -159,8 +182,7 @@ class DcmData:
 
     def get_external_cmap(self):
         """"Retrieve colour map from external file"""
-        cmap_path = get_project_root() / 'src/colormap.mat'
-        cmap = sio.loadmat(str(cmap_path))
+        cmap = sio.loadmat(str(CMAP_PATH))
         cmap_arr = cmap['map']
         scaled_cmap = (cmap_arr * 255).astype(int)
         scaled_cmap = np.flip(scaled_cmap, 0)
@@ -172,24 +194,57 @@ class DcmData:
         Returns: colour profile and corresponding "real values" of velocity or modulus
         """
         if cmap_loc == 'local_cmap':
-            colour_bar = {'x0': 693, 'y0': 70, 'x1': 701, 'y1': 180}  # retrieved manually from IJ
+            # retrieved manually from IJ. NB: only the central columns of the bar (x 695-698) are used,
+            # because its edge columns are blurred with the black background
+            colour_bar = {'x0': 695, 'y0': 70, 'x1': 699, 'y1': 180}
             scale_arr = self.img_array[0][colour_bar['y0']:colour_bar['y1'],
                         colour_bar['x0']:colour_bar['x1'],
                         :]
             # 2D array for single pxl colour scale, with width 3 (r, g, b)
-            self.colour_profile = scale_arr.mean(axis=1, dtype=int)
+            self.colour_profile = scale_arr.mean(axis=1)
         elif cmap_loc == 'external_cmap':
             self.colour_profile = self.get_external_cmap()  # reference to a standard colour map (Elastogui)
-        # 1D array of values matching colour profile (velocity or modulus)
-        self.real_values = np.linspace(self.max_scale, 0, self.colour_profile.shape[0])
+        # 1D array of values matching colour profile (velocity or modulus).
+        # NB: the colour bar is linear in modulus, even when the scale is displayed in m/s
+        # (e.g. ticks at 8.9, 13, 15, 18 m/s for a 20 m/s scale = 240, 480, 720, 960 kPa)
+        n_colours = self.colour_profile.shape[0]
+        if self.analysis_swe_var == 'velocity':
+            max_modulus = data_utils.convert_swe(self.max_scale, 'velocity', 'youngs_m')
+            moduli = np.linspace(max_modulus, 0, n_colours)
+            self.real_values = data_utils.convert_swe(moduli, 'youngs_m', 'velocity')
+        else:
+            self.real_values = np.linspace(self.max_scale, 0, n_colours)
+
+    def positions_to_values(self, positions):
+        """Convert positions along the colour bar (0 = top row) to values of the analysed variable
+        NB: the colour bar is linear in modulus, even when the scale is displayed in m/s
+        """
+        fraction = 1 - np.asarray(positions, dtype=float) / (self.colour_profile.shape[0] - 1)  # 1 = max scale
+        if self.analysis_swe_var == 'velocity':
+            max_modulus = data_utils.convert_swe(self.max_scale, 'velocity', 'youngs_m')
+            return data_utils.convert_swe(fraction * max_modulus, 'youngs_m', 'velocity')
+        return fraction * self.max_scale
+
+    def decode_box(self, cmap_loc, offset=3):
+        """Decode values over the whole SWE box of each SWE map (for display, e.g. to place the ROI)
+        Returns: (maps (n, height, width) with NaN for void pixels, x0, y0 of the box in the image)
+        """
+        (x0, y0), (x1, y1) = self.get_roi_coord(self.swe, offset=offset)  # offset avoids box outline
+        box = self.swe_array[:, y0:y1, x0:x1, :]
+        self.set_colour_scale(cmap_loc)
+        values = self.positions_to_values(data_utils.colour_positions(box, self.colour_profile))
+        values[~self.colour_mask(box)] = np.nan
+        return values, x0, y0
 
     def analyse_roi(self, cmap_loc):
         """Calculate stat parameter of interest for ROIs of each frame"""
+        self.cmap_loc = cmap_loc
         self.rois = self.get_rois(self.swe_array)
         self.set_colour_scale(cmap_loc)
         filter_mask = self.void_filter()
-        indices = data_utils.closest_rgb(self.rois, self.colour_profile)
-        self.mapped_values = self.real_values[indices]
+        # continuous decoding: position of each pixel's colour along the colour bar (see colour_positions)
+        self.colour_indices = data_utils.colour_positions(self.rois, self.colour_profile)
+        self.mapped_values = self.positions_to_values(self.colour_indices)
         self.filtered_values = np.where(filter_mask, self.mapped_values, np.nan)
 
         saturated_pxls = self.filtered_values > self.max_scale * self.sat_thresh_var.get() / 100
@@ -198,83 +253,57 @@ class DcmData:
         voided_pxls = np.isnan(self.filtered_values)
         self.void_percent = self.calc_pixel_percent(voided_pxls)
         if np.all(self.void_percent == 100):
-            app_utils.warn_no_swe_data()
-            exit()
-        else:
-            self.gen_results()
+            raise NoSWEDataError('No elastography data in the selected ROI')
+        self.gen_results()
 
     def gen_results(self):
-        """Generate 3 sets of results for velocity, shear and Young's modulus"""
-        target_vars = ['velocity', 'shear_m', 'youngs_m']
+        """Generate per-map statistics (velocity, shear and Young's modulus), quality flags and metadata"""
+        n_maps = self.filtered_values.shape[0]
+        frame_idx = self.swe_indices if self.swe_indices is not None else np.arange(n_maps)
+        sat_thresh = self.sat_thresh_var.get()
+
         d = {'file': [self.path.stem, self.path.parent],
              'roi_coords': self.roi_coords,
              'roi_shape': self.roi_shape,
+             'resampling': self.resampling,
+             'pixel_xy': self.pixel_xy,
              'raw': {},
-             'stats': {}}
-        d['stats']['%_void'] = self.void_percent
-        d['stats'][f'%_saturated (> {self.sat_thresh_var.get()}% maxscale)'] = self.saturated_percent
-        for target_var in target_vars:
+             'stats': {},
+             'meta': {}}
+        stats = d['stats']
+        stats['dicom_frame'] = frame_idx + 1  # 1-based, as the frame counter on screen
+        stats['time_s'] = np.round(frame_idx * self.frame_time_ms / 1000, 3)
+        stats['included'] = np.ones(n_maps, dtype=bool)  # set by quality filters below
+        stats['%_void'] = self.void_percent
+        stats[f'%_saturated (> {sat_thresh}% maxscale)'] = self.saturated_percent
+        for target_var in summary.SWE_VARS:
             if target_var == self.analysis_swe_var:
                 d['raw'][target_var] = self.filtered_values
             else:
                 d['raw'][target_var] = data_utils.convert_swe(self.filtered_values,
                                                               self.analysis_swe_var,
                                                               target_var)
-            filtered = d['raw'][target_var]
-            d['stats']['_'.join((target_var, 'median'))] = np.nanmedian(filtered, axis=1)
-            d['stats']['_'.join((target_var, 'mean'))] = np.nanmean(filtered, axis=1)
-            d['stats']['_'.join((target_var, 'SD'))] = np.nanstd(filtered, axis=1)
+            for stat, values in summary.per_map_stats(d['raw'][target_var]).items():
+                stats[f'{target_var}_{stat}'] = values
+        # colour level of pixels above the bottom of the colour bar: indicates measurement resolution
+        n_levels = self.colour_profile.shape[0] - 1
+        levels = np.where(np.isnan(self.filtered_values), np.nan, n_levels - self.colour_indices)
+        stats['median_colour_level'] = summary.per_map_stats(levels)['median']
+
+        resampling = self.resampling or {}
+        d['meta'] = {'analysis_variable': self.analysis_swe_var,
+                     'max_scale': self.max_scale,
+                     'colour_map': self.cmap_loc,
+                     'colour_decoding': 'interpolated along colour bar',
+                     'colour_levels_in_scale': n_levels,
+                     'median_colour_level': np.nan,  # set by quality filters
+                     'scale_warning': False,
+                     'roi_shape': self.roi_shape,
+                     'roi_pixels': int(self.filtered_values.shape[1]),
+                     'frame_time_ms': round(self.frame_time_ms, 3),
+                     'swe_refresh_period_frames': resampling.get('period_frames'),
+                     'swe_refresh_detection': resampling.get('method'),
+                     'saturation_threshold_%_of_max_scale': sat_thresh,
+                     'swepy_version': swepy_core.__version__}
+        summary.apply_quality(d)
         self.results = d
-        self.mean = np.nanmean(self.filtered_values)
-        self.mean_low_stdev, mask = mean_lowest_stdev_subarray(self.filtered_values, return_mask=True)
-        d['stats']['Low stdev subarray'] = mask
-        self.median = np.nanmedian(self.filtered_values)
-
-
-if __name__ == '__main__':
-    import pandas as pd
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-
-    filepath = Path('../../test_files/C0000001_LOSSY.dcm')
-    data = DcmData(filepath)
-
-    data.load_dicom()
-    data.resample(1)
-    data.max_scale = 20
-    # data.resample(1.1)
-    # data.max_scale = 1200
-    data.set_colour_scale('local_cmap')
-    plt.imshow(data.swe_array[0, :, :, :])
-
-    # analyse_roi()
-    data.rois = data.get_rois(data.swe_array)
-    data.set_colour_scale('local_cmap')
-    filter_mask = data.void_filter()
-    indices = data_utils.closest_rgb(data.rois, data.colour_profile)
-    data.mapped_values = data.real_values[indices]
-
-    # inspect mapped values
-    df = pd.DataFrame(data.mapped_values.T)
-    df_long = pd.melt(df, var_name="frame", value_name="modulus")
-    fig1, (ax1, ax2) = plt.subplots(nrows=2)
-    g1 = sns.stripplot(x="frame", y="modulus", data=df_long,
-                       linewidth=1, ax=ax1, size=1)
-    g2 = sns.violinplot(x="frame", y="modulus", data=df_long,
-                        linewidth=1, ax=ax2)
-    plt.show()
-
-    # plot modulus stats for each frame
-    x_start, y_start = data.roi_coords[0][0] + 1, data.roi_coords[0][1] + 1
-    x_stop, y_stop = data.roi_coords[1][0] - 1, data.roi_coords[1][1] - 1  # adjusted to avoid ROI frame
-    rois = data.swe_array[:, y_start:y_stop, x_start:x_stop, :]
-    roi0 = rois[0]
-    rois_indices = data_utils.closest_rgb(roi0, data.colour_profile)
-    roi0_values = data.real_values[rois_indices]
-
-    # plot zoomed and rescaled ROI
-    # extent = [x_start, x_stop, y_start, y_stop]
-    # fig2 = plt.figure()
-    # ax = fig2.add_subplot(111)
-    # im = ax.imshow(roi0_values, extent=extent, origin='lower', interpolation='None', cmap='viridis')
-    # fig2.colorbar(im)

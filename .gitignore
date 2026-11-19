@@ -132,3 +132,7 @@ test.py
 # custom
 .idea/
 /.vscode/
+.DS_Store
+
+# swepy user data from older versions (now stored in the user's app-data folder)
+src/cache/

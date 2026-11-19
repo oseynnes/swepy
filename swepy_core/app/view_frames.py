@@ -3,7 +3,7 @@ from tkinter import ttk
 
 from PIL import ImageTk, Image
 
-from swepy_core.app.app_utils import warn_no_video
+from swepy_core.app.app_utils import text_width, warn_no_video
 from swepy_core.processing import data_utils
 
 
@@ -16,7 +16,7 @@ class TopPanel(ttk.Frame):
 
         self.grid(row=0, column=1, sticky=tk.EW)
 
-        self.img_name = ttk.Label(self, anchor=tk.CENTER, text='')
+        self.img_name = ttk.Label(self, anchor=tk.CENTER, text='No file loaded (File > Open...)')
         self.img_name.pack(**options)
 
 
@@ -24,26 +24,29 @@ class LeftPanel(ttk.Frame):
     """Panel of GUI displaying app related to file opening and analysis"""
 
     def __init__(self, parent):
-        super().__init__(parent)
+        super().__init__(parent, padding=(5, 0, 0, 5))
 
         self.view = parent
 
-        self.grid(row=1, column=0, rowspan=3, sticky=tk.NSEW)
+        self.grid(row=1, column=0, sticky=tk.NSEW)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)
 
-        self.input_frame = ttk.LabelFrame(self, text='User input')
-        self.input_frame.grid(row=0, column=0, sticky=tk.NSEW)
+        self.input_frame = ttk.LabelFrame(self, text='User input', padding=5)
+        self.input_frame.grid(row=0, column=0, sticky=tk.EW, pady=(0, 5))
+        self.input_frame.columnconfigure(1, weight=1)
 
         fhz_label = ttk.Label(self.input_frame, text='SWE fhz:')
-        fhz_label.grid(column=0, row=0, sticky=tk.W, padx=5)
+        fhz_label.grid(column=0, row=0, sticky=tk.W, padx=5, pady=2)
         self.usr_fhz = tk.StringVar()
-        self.fhz_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_fhz)
-        self.fhz_entry.grid(column=1, row=0, sticky=tk.E, padx=5)
+        self.fhz_entry = ttk.Entry(self.input_frame, width=7, textvariable=self.usr_fhz)
+        self.fhz_entry.grid(column=1, row=0, sticky=tk.E, padx=5, pady=2)
 
         scale_label = ttk.Label(self.input_frame, text='max. scale:')
-        scale_label.grid(column=0, row=1, sticky=tk.W, padx=5)
+        scale_label.grid(column=0, row=1, sticky=tk.W, padx=5, pady=2)
         self.usr_scale = tk.StringVar()
-        self.scale_entry = ttk.Entry(self.input_frame, width=4, textvariable=self.usr_scale)
-        self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5)
+        self.scale_entry = ttk.Entry(self.input_frame, width=7, textvariable=self.usr_scale)
+        self.scale_entry.grid(column=1, row=1, sticky=tk.E, padx=5, pady=2)
 
         self.usr_params = data_utils.get_settings('SWE_PARAM')
         if self.usr_params:
@@ -53,11 +56,12 @@ class LeftPanel(ttk.Frame):
         self.enter_btn = ttk.Button(self.input_frame, text='Set values')
         self.enter_btn.grid(column=1, row=2, sticky=tk.E, padx=5, pady=5)
 
-        self.swe_var_frame = ttk.Frame(self)
-        self.swe_var_frame.grid(row=1, column=0, sticky=tk.NSEW)
+        self.swe_var_frame = ttk.LabelFrame(self, text='Scale variable', padding=5)
+        self.swe_var_frame.grid(row=1, column=0, sticky=tk.EW, pady=(0, 5))
+        # NB: a scale in kPa can show Young's (E) or shear (\u03BC) modulus, depending on scanner settings
         self.variable_labels = {'velocity': 'V (m/s)',
                                 'shear_m': '\u03BC (kPa)',
-                                'youngs_m': "\u03B5 (kPa)"}
+                                'youngs_m': "E (kPa)"}
         grid_column = 0
         for key, label in self.variable_labels.items():
             radio = ttk.Radiobutton(self.swe_var_frame,
@@ -65,11 +69,13 @@ class LeftPanel(ttk.Frame):
                                     value=key,
                                     variable=self.view.swe_var,
                                     command=lambda: self.log_swe_var())
-            radio.grid(column=grid_column, row=3, ipadx=5, ipady=20)
+            radio.grid(column=grid_column, row=0, padx=(0, 10), pady=2)
             grid_column += 1
 
         self.tree_frame = ttk.Frame(self)
         self.tree_frame.grid(row=2, column=0, sticky=tk.NSEW)
+        self.tree_frame.columnconfigure(0, weight=1)
+        self.tree_frame.rowconfigure(0, weight=1)
         columns = ('dcm_property', 'value')
         self.var_names = ('Scan ID',
                           'Date/time',
@@ -79,18 +85,23 @@ class LeftPanel(ttk.Frame):
                           'Lossy compression',
                           'B mode Fhz')
         self.values = (None,)
-        self.tv = ttk.Treeview(self.tree_frame, columns=columns, show='headings')
-        self.tv.heading('dcm_property', text="File properties")
-        self.tv.column('dcm_property', width=100)
-        self.tv.heading("value", text="Value")
-        self.tv.column('value', width=200)
-        self.tv.grid(sticky=tk.NSEW)
+        # 7 rows of file properties + 2 rows of user input
+        self.tv = ttk.Treeview(self.tree_frame, columns=columns, show='headings', height=9)
+        self.tv.heading('dcm_property', text="File properties", anchor=tk.W)
+        self.tv.column('dcm_property', width=text_width('Lossy compression'), stretch=False)
+        self.tv.heading("value", text="Value", anchor=tk.W)
+        self.tv.column('value', width=text_width('00/00/0000 00:00:00'), stretch=True)
+        self.tv.grid(row=0, column=0, columnspan=3, sticky=tk.NSEW)
 
-        self.reset_roi_btn = ttk.Button(self.tree_frame, text="Reset ROI", width=8)
-        self.reset_roi_btn.grid(sticky=tk.W)
+        self.reset_roi_btn = ttk.Button(self.tree_frame, text="Reset ROI")
+        self.reset_roi_btn.grid(row=1, column=0, sticky=tk.W, pady=5)
 
-        self.analyse_btn = ttk.Button(self.tree_frame, text="Analyse", width=8)
-        self.analyse_btn.grid(sticky=tk.W)
+        # shows decoded values over the whole SWE box, to place the ROI away from stiff structures
+        self.value_map_btn = ttk.Button(self.tree_frame, text="Value map")
+        self.value_map_btn.grid(row=1, column=1, padx=5, pady=5)
+
+        self.analyse_btn = ttk.Button(self.tree_frame, text="Analyse")
+        self.analyse_btn.grid(row=1, column=2, sticky=tk.E, pady=5)
 
     def log_swe_var(self):
         """Save last chosen SWE variable"""
@@ -105,11 +116,10 @@ class ImgPanel(ttk.Frame):
 
         self.view = parent
 
+        # NB: images are displayed at their native size (1 image pixel = 1 canvas pixel),
+        # because ROI coordinates drawn on the canvas are used directly as image indices.
         self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
-        self.canvas.pack(ipadx=5, ipady=5, fill=tk.BOTH, expand=True)
-        self.grid(row=1, column=1, rowspan=3, sticky=tk.NSEW, padx=5, pady=5)
-        self.columnconfigure(1, weight=4)
-        self.rowconfigure(1, weight=4)
+        self.grid(row=1, column=1, sticky=tk.NSEW, padx=5, pady=(0, 5))
 
         self.n_frames = 0
         self.top_fov_coords = {'x0': 0,
@@ -117,6 +127,7 @@ class ImgPanel(ttk.Frame):
                                'x1': int(self.canvas['width']),
                                'y1': int(self.canvas['height']) / 2}
 
+        self.fov_y_offset = 225  # default for Mach30 top/bottom layout, replaced by DICOM value
         self.new_roi = tk.BooleanVar()
         self.new_roi.set(True)
         self.roi_coords = []
@@ -149,7 +160,11 @@ class ImgPanel(ttk.Frame):
             variable=self.shape,
             command=self.reset_draw).grid(column=1, row=0, padx=5, pady=5)
 
-        self.roi_frame.pack(ipadx=5, ipady=5, anchor=tk.W, expand=True)
+        # Pack bottom widgets first: if the window is too small, the image gets cropped
+        # rather than the controls disappearing
+        self.roi_frame.pack(side=tk.BOTTOM, anchor=tk.W, pady=(5, 0))
+        self.ctrl.pack(side=tk.BOTTOM, fill=tk.X)
+        self.canvas.pack(side=tk.TOP, anchor=tk.NW, fill=tk.BOTH, expand=True)
 
     # Specific functions
     def activate_draw(self):
@@ -181,7 +196,7 @@ class ImgPanel(ttk.Frame):
         Returns: offset list of (x, y) coordinates
         """
         roi_coords = self.roi_coords if not coords else coords
-        roi_offset = 225 if self.isin_top_fov() else -225
+        roi_offset = self.fov_y_offset if self.isin_top_fov() else -self.fov_y_offset
         if isinstance(roi_coords[0], tuple):
             m_coords = [(coord[0], coord[1] + roi_offset) for coord in roi_coords]
         elif isinstance(roi_coords[0], int):
@@ -201,6 +216,9 @@ class ImgPanel(ttk.Frame):
         self.new_roi.set(True)
 
     def set_rois(self):
+        # NB: a rectangle needs 2 corners (only 1 exists while the user is drawing it)
+        if self.shape.get() == 'rectangle' and len(self.roi_coords) < 2:
+            return
         if self.roi_coords:
             self.draw_rois()
 
@@ -270,12 +288,10 @@ class DisplayControls(ttk.Frame):
 
         self.img_panel = parent
 
-        self.pack(ipadx=5, ipady=5, fill=tk.BOTH, expand=True)
-
         self.current_frame = 0
 
         self.pause = False  # control video pause
-        self.play_btn = ttk.Button(self, width=5, text="Play")
+        self.play_btn = ttk.Button(self, width=6, text="Play")
         self.play_btn.pack(side='left')
         self.play_btn['command'] = self.toggle_play_pause
 
