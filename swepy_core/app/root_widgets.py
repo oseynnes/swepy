@@ -5,6 +5,7 @@ from tkinter import ttk
 
 from swepy_core.app import app_utils
 from swepy_core.app.view_frames import apo_mode_enabled
+from swepy_core.processing.data import get_colour_decoding
 from swepy_core.processing import data_utils
 
 
@@ -105,22 +106,14 @@ class Settings(tk.Toplevel):
         self.current_value.grid(row=0, column=1, sticky=tk.W)
         self.current_value.bind('<<UpdateNeeded>>', self.update_current_value)
 
-        # user entry for origin of colour map to use for scaling
-        # The external map is a standard colour scale ('Jet') from ElastoGUI programme
-        self.cmap_frame = ttk.LabelFrame(self, text='Source of colour map', padding=5)
-        self.cmap_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
-        self.cmap_labels = {'local_cmap': 'From image',
-                            'external_cmap': 'Standard reference (experimental)'}
-        grid_column = 0
-        for key, label in self.cmap_labels.items():
-            radio = ttk.Radiobutton(self.cmap_frame,
-                                    text=label,
-                                    value=key,
-                                    variable=self.menu.app.view.cmap_loc_var,
-                                    command=lambda: self.log_cmap_loc())
-
-            radio.grid(column=grid_column, row=0, padx=(0, 10), pady=2)
-            grid_column += 1
+        # colour decoding: interpolated between colour bar rows (default) or nearest row (raw colour bar)
+        self.decoding_frame = ttk.LabelFrame(self, text='Colour decoding (applies to new analyses)', padding=5)
+        self.decoding_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        self.decoding = tk.StringVar(value=get_colour_decoding())
+        for column, (key, label) in enumerate((('interpolated', 'Interpolated colour bar (default)'),
+                                               ('nearest', 'Raw colour bar (nearest colour)'))):
+            ttk.Radiobutton(self.decoding_frame, text=label, value=key, variable=self.decoding,
+                            command=self.save_decoding).grid(column=column, row=0, padx=(0, 10), pady=2)
 
         # aponeurosis mode (hidden by default) and half-width of the band around the aponeurosis (standard: 1 mm)
         self.apo_frame = ttk.LabelFrame(self, text='Aponeurosis mode', padding=5)
@@ -195,5 +188,5 @@ class Settings(tk.Toplevel):
         number = self.last_valid_thresh
         w['text'] = f'threshold: {number}%'
 
-    def log_cmap_loc(self):
-        data_utils.save_cmap_source(self.menu.app.view.cmap_loc_var.get())
+    def save_decoding(self):
+        data_utils.set_setting('COLOUR_DECODING', [self.decoding.get()])

@@ -138,6 +138,8 @@ See the step-by-step guide: [docs/aponeurosis_mode.md](docs/aponeurosis_mode.md)
    Each pixel's colour is placed along the bar's colour gradient, between the two closest bar colours, which gives its value.
    Scanners draw maps with many more colours than the ~110 rows of the bar (e.g. 1370 colours in an uncompressed
    Mach30 export), so this recovers values between bar rows instead of rounding them to the nearest row.
+   The earlier method (nearest bar row, *Raw colour bar*) can be chosen in Edit > Settings > Colour decoding;
+   the method used is recorded in each result (`colour_decoding`).
    The colour bar is linear in modulus, even when its scale is displayed in m/s, which swepy takes into account.
 3. **Void pixels.** Pixels without colour (no SWE signal) are excluded.
 4. **Statistics.** Each map is summarised by the median of its pixels, which is robust to the skewed distributions
@@ -177,7 +179,6 @@ Frames of one recording share the same probe placement, so they cannot capture t
   in our tests, with tissue mid-scale. Lossless exports (≈70 MB) keep exact colours, if maximal precision is needed.
 - The SWE map **opacity** must be set to 100 % on the scanner (colours blended with the B-mode image cannot be decoded).
 - The position of the colour bar in the image is fixed for the Mach30 screen layout. Check results on other layouts.
-- The "standard reference" colour map (Settings) is experimental: it does not match the Supersonic colour scale exactly and gives different values.
 - The percentage of saturated pixels is relative to the whole ROI (void pixels included).
 - The value map display is not available for results cached by versions older than 0.2.0 (analyse the file again).
 - Version 0.2.0 changed the frame selection, the colour bar sampling and the conversion of m/s scales: results can differ from earlier versions, especially for scales in m/s and for soft tissue measured with a large scale.

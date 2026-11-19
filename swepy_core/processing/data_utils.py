@@ -120,11 +120,6 @@ def save_swe_var(swe_var):
     set_setting('SWE_VAR', [swe_var])
 
 
-def save_cmap_source(cmap_loc):
-    """Save cmap preference"""
-    set_setting('CMAP_LOC', [cmap_loc])
-
-
 def save_sat_thresh(sat_thresh):
     """Save chosen saturation level"""
     set_setting('SAT_THRESH', [sat_thresh])

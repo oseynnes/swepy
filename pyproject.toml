@@ -40,6 +40,3 @@ swepy = "swepy_core.start:main"
 
 [tool.setuptools.packages.find]
 include = ["swepy_core*"]
-
-[tool.setuptools.package-data]
-swepy_core = ["resources/*.mat"]

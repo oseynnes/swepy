@@ -52,8 +52,8 @@ Notes:
 ## Before starting (once)
 
 1. **Edit > Settings**, section *Aponeurosis mode*: tick **Enable aponeurosis ROI shapes** (the mode is hidden
-   by default), and check that the *Band half-width* is **1** mm (standard). Also check that the colour map
-   source is **From image**. Enabling the mode also selects *ROI shape: Aponeurosis*. **Close the Settings window**
+   by default), and check that the *Band half-width* is **1** mm (standard). Also check that *Colour decoding*
+   is **Interpolated colour bar** (default). Enabling the mode also selects *ROI shape: Aponeurosis*. **Close the Settings window**
    before working on the image (clicks on the image are ignored while it is open). The setting is remembered;
    untick it to hide the aponeurosis tools again.
 2. In the Results tab, check the quality filters (defaults: 20 % void, 5 % saturated, 0 s).

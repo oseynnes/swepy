@@ -1,15 +1,20 @@
 import tkinter
-from pathlib import Path
 
 import numpy as np
-import scipy.io as sio
 from pydicom import dcmread
 from skimage.draw import polygon
 
 import swepy_core
 from swepy_core.processing import data_utils, summary
 
-CMAP_PATH = Path(__file__).resolve().parent.parent / 'resources' / 'colormap.mat'
+COLOUR_DECODING = {'interpolated': 'interpolated along colour bar',   # default
+                   'nearest': 'nearest colour bar row'}
+
+
+def get_colour_decoding():
+    """Colour decoding method chosen in Edit > Settings ('interpolated' by default)"""
+    value = data_utils.get_settings('COLOUR_DECODING')
+    return value[0] if value and value[0] in COLOUR_DECODING else 'interpolated'
 
 
 class NoSWEDataError(Exception):
@@ -40,7 +45,7 @@ class DcmData:
         self.frame_time_ms = None
         self.pixel_xy = None  # (x, y) image coordinates of ROI pixels
         self.colour_indices = None  # position of each ROI pixel along the colour bar (0 = top, float)
-        self.cmap_loc = None
+        self.colour_decoding = None
         self.roi_mode = None  # 'rectangle', 'polygon', 'apo_auto' or 'apo_manual'
         self.reference_coords = None  # optional reference ROI (e.g. muscle next to an aponeurosis)
         self.reference_values = None
@@ -196,30 +201,20 @@ class DcmData:
         void_mask = cumulated_diff > threshold
         return void_mask
 
-    def get_external_cmap(self):
-        """"Retrieve colour map from external file"""
-        cmap = sio.loadmat(str(CMAP_PATH))
-        cmap_arr = cmap['map']
-        scaled_cmap = (cmap_arr * 255).astype(int)
-        scaled_cmap = np.flip(scaled_cmap, 0)
-        return scaled_cmap
-
-    def set_colour_scale(self, cmap_loc):
+    def set_colour_scale(self):
         """
-        Thin colour map to one pixel width and set matching scale based on max. scale value
+        Thin colour bar of the image to one pixel width and set matching scale based on max. scale value
         Returns: colour profile and corresponding "real values" of velocity or modulus
         """
-        if cmap_loc == 'local_cmap':
-            # retrieved manually from IJ. NB: only the central columns of the bar (x 695-698) are used,
-            # because its edge columns are blurred with the black background
-            colour_bar = {'x0': 695, 'y0': 70, 'x1': 699, 'y1': 180}
-            scale_arr = self.img_array[0][colour_bar['y0']:colour_bar['y1'],
-                        colour_bar['x0']:colour_bar['x1'],
-                        :]
-            # 2D array for single pxl colour scale, with width 3 (r, g, b)
-            self.colour_profile = scale_arr.mean(axis=1)
-        elif cmap_loc == 'external_cmap':
-            self.colour_profile = self.get_external_cmap()  # reference to a standard colour map (Elastogui)
+        # retrieved manually from IJ. NB: only the central columns of the bar (x 695-698) are used,
+        # because its edge columns are blurred with the black background
+        colour_bar = {'x0': 695, 'y0': 70, 'x1': 699, 'y1': 180}
+        scale_arr = self.img_array[0][colour_bar['y0']:colour_bar['y1'],
+                    colour_bar['x0']:colour_bar['x1'],
+                    :]
+        # 2D array for single pxl colour scale, with width 3 (r, g, b)
+        self.colour_profile = scale_arr.mean(axis=1)
+        self.colour_decoding = get_colour_decoding()
         # 1D array of values matching colour profile (velocity or modulus).
         # NB: the colour bar is linear in modulus, even when the scale is displayed in m/s
         # (e.g. ticks at 8.9, 13, 15, 18 m/s for a 20 m/s scale = 240, 480, 720, 960 kPa)
@@ -231,6 +226,13 @@ class DcmData:
         else:
             self.real_values = np.linspace(self.max_scale, 0, n_colours)
 
+    def colour_to_positions(self, rgb):
+        """Position of each colour along the colour bar (0 = top row), with the chosen decoding method:
+        'interpolated' (between bar rows, default) or 'nearest' (nearest bar row, raw colour bar)"""
+        if self.colour_decoding == 'nearest':
+            return data_utils.closest_rgb(rgb, self.colour_profile).astype(float)
+        return data_utils.colour_positions(rgb, self.colour_profile)
+
     def positions_to_values(self, positions):
         """Convert positions along the colour bar (0 = top row) to values of the analysed variable
         NB: the colour bar is linear in modulus, even when the scale is displayed in m/s
@@ -241,14 +243,14 @@ class DcmData:
             return data_utils.convert_swe(fraction * max_modulus, 'youngs_m', 'velocity')
         return fraction * self.max_scale
 
-    def decode_box(self, cmap_loc, offset=3):
+    def decode_box(self, offset=3):
         """Decode values over the whole SWE box of each SWE map (for display, e.g. to place the ROI)
         Returns: (maps (n, height, width) with NaN for void pixels, x0, y0 of the box in the image)
         """
         (x0, y0), (x1, y1) = self.get_roi_coord(self.swe, offset=offset)  # offset avoids box outline
         box = self.swe_array[:, y0:y1, x0:x1, :]
-        self.set_colour_scale(cmap_loc)
-        values = self.positions_to_values(data_utils.colour_positions(box, self.colour_profile))
+        self.set_colour_scale()
+        values = self.positions_to_values(self.colour_to_positions(box))
         values[~self.colour_mask(box)] = np.nan
         return values, x0, y0
 
@@ -257,17 +259,16 @@ class DcmData:
         coords_arr = np.asarray(coords)
         rr, cc = polygon(coords_arr[:, 0], coords_arr[:, 1])
         rgb = self.swe_array[:, cc, rr, :]
-        values = self.positions_to_values(data_utils.colour_positions(rgb, self.colour_profile))
+        values = self.positions_to_values(self.colour_to_positions(rgb))
         return np.where(self.colour_mask(rgb), values, np.nan)
 
-    def analyse_roi(self, cmap_loc):
+    def analyse_roi(self):
         """Calculate stat parameter of interest for ROIs of each frame"""
-        self.cmap_loc = cmap_loc
         self.rois = self.get_rois(self.swe_array)
-        self.set_colour_scale(cmap_loc)
+        self.set_colour_scale()
         filter_mask = self.void_filter()
-        # continuous decoding: position of each pixel's colour along the colour bar (see colour_positions)
-        self.colour_indices = data_utils.colour_positions(self.rois, self.colour_profile)
+        # position of each pixel's colour along the colour bar (interpolated between rows by default)
+        self.colour_indices = self.colour_to_positions(self.rois)
         self.mapped_values = self.positions_to_values(self.colour_indices)
         self.filtered_values = np.where(filter_mask, self.mapped_values, np.nan)
 
@@ -324,8 +325,7 @@ class DcmData:
         resampling = self.resampling or {}
         d['meta'] = {'analysis_variable': self.analysis_swe_var,
                      'max_scale': self.max_scale,
-                     'colour_map': self.cmap_loc,
-                     'colour_decoding': 'interpolated along colour bar',
+                     'colour_decoding': COLOUR_DECODING[self.colour_decoding],
                      'colour_levels_in_scale': n_levels,
                      'median_colour_level': np.nan,  # set by quality filters
                      'scale_warning': False,

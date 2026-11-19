@@ -41,8 +41,6 @@ class View(ttk.Frame):
         self.img_name = None
         self.swe_var = tk.StringVar()
         self.set_swe_var()
-        self.cmap_loc_var = tk.StringVar()
-        self.set_cmap_loc()
 
         self.controller = None
 
@@ -71,13 +69,6 @@ class View(ttk.Frame):
             self.swe_var.set(swe_var[0])
         else:
             self.swe_var.set('youngs_m')  # set default SWE variable to Young's modulus
-
-    def set_cmap_loc(self):
-        cmap_loc = data_utils.get_settings('CMAP_LOC')
-        if cmap_loc:
-            self.cmap_loc_var.set(cmap_loc[0])
-        else:
-            self.cmap_loc_var.set('local_cmap')  # set default choice to cmap in image
 
     def set_controller(self, controller):
         self.controller = controller
@@ -336,7 +327,7 @@ class Controller:
         """Decode values over the whole SWE box with current user entries"""
         self.data.max_scale = self.view.max_scale
         self.data.analysis_swe_var = self.view.swe_var.get()
-        return self.data.decode_box(cmap_loc=self.view.cmap_loc_var.get())
+        return self.data.decode_box()
 
     def compute_apo(self, seed=None, points=None, rows=None, source=None, previous_depth_mm=None):
         """Locate the aponeurosis and build its band ROI and muscle reference ROI
@@ -408,7 +399,7 @@ class Controller:
         self.data.reference_coords = apo['reference'] if apo else None
         self.data.apo_info = dict(apo['info']) if apo else {}
         try:
-            self.data.analyse_roi(cmap_loc=self.view.cmap_loc_var.get())
+            self.data.analyse_roi()
         except NoSWEDataError:
             app_utils.warn_no_swe_data()
             return False
