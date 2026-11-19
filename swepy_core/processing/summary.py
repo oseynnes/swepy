@@ -65,7 +65,31 @@ def per_map_stats(values):
         return {'median': median,
                 'IQR': p75 - p25,
                 'mean': np.nanmean(values, axis=1),
-                'SD': np.nanstd(values, axis=1)}
+                'SD': np.nanstd(values, axis=1),
+                'q25_median_q75': (p25, median, p75)}
+
+
+def exclusion_reasons(void_pct, saturated_pct, time_s, quality):
+    """Reason(s) for excluding each map ('' for maps passing the quality filters)"""
+    reasons = []
+    for void, sat, t in zip(*(np.asarray(a, dtype=float) for a in (void_pct, saturated_pct, time_s))):
+        r = []
+        if void >= 100:
+            r.append('no SWE data')
+        elif void > quality['max_void_pct']:
+            r.append(f"void {void:.0f}% > {quality['max_void_pct']:g}%")
+        if sat > quality['max_saturated_pct']:
+            r.append(f"saturated {sat:.0f}% > {quality['max_saturated_pct']:g}%")
+        if t < quality['ignore_first_s']:
+            r.append(f"before {quality['ignore_first_s']:g} s")
+        reasons.append('; '.join(r))
+    return np.array(reasons, dtype=object)
+
+
+def reason_category(reason):
+    """Reason without the map's own values (e.g. 'void > 20%'), to count maps per reason"""
+    import re
+    return re.sub(r'(void|saturated) \d+% ', r'\1 ', reason)
 
 
 def quality_mask(void_pct, saturated_pct, time_s, quality):
@@ -102,8 +126,10 @@ def apply_quality(results, quality=None):
     quality = quality or get_quality_settings()
     stats = results['stats']
     n_maps = len(stats['%_void'])
-    included = quality_mask(stats['%_void'], _saturated(stats), stats.get('time_s', np.zeros(n_maps)), quality)
+    reasons = exclusion_reasons(stats['%_void'], _saturated(stats), stats.get('time_s', np.zeros(n_maps)), quality)
+    included = reasons == ''
     stats['included'] = included
+    stats['exclusion_reason'] = reasons
     meta = results.setdefault('meta', {})
     swe_var = meta.get('analysis_variable')
     if swe_var and f'{swe_var}_median' in stats:
@@ -145,7 +171,9 @@ def summarise(results):
                'main_result': np.nan,
                'main_result_description': '',
                'n_maps': n_maps,
-               'n_maps_included': int(included.sum())}
+               'n_maps_included': int(included.sum()),
+               'n_maps_excluded': int((~included).sum()),
+               'exclusion_reasons': _count_reasons(stats, included)}
     for var in ordered_vars(measured):
         maps = per_map_stats(results['raw'][var])
         medians = maps['median'][included]
@@ -164,12 +192,31 @@ def summarise(results):
             for key in ('mean_of_map_medians', 'SD_between_maps', 'CV%_between_maps',
                         'median_IQR_within_maps', f'mean_of_{N_STABLE_MAPS}_most_stable_maps'):
                 summary[f'{var}_{key}'] = np.nan
+    if 'reference_median' in stats:  # reference ROI (measured variable), e.g. muscle next to an aponeurosis
+        ref = np.asarray(stats['reference_median'], dtype=float)[included]
+        ref = ref[~np.isnan(ref)]
+        summary['reference_mean_of_map_medians'] = float(np.mean(ref)) if len(ref) else np.nan
     if measured:
         summary['main_result'] = summary[f'{measured}_{MAIN_STAT}']
+        if 'reference_mean_of_map_medians' in summary:
+            summary['main_to_reference_ratio'] = summary['main_result'] / summary['reference_mean_of_map_medians']
         summary['main_result_description'] = (f'{LABELS[measured]} ({UNITS[measured]}), '
                                               f'mean of the medians of included SWE maps')
+    first = ('file', 'folder', 'main_result', 'main_result_description', 'reference_mean_of_map_medians',
+             'main_to_reference_ratio')
+    summary = {**{k: summary[k] for k in first if k in summary}, **summary}
     summary.update(results.get('meta', {}))
     return summary
+
+
+def _count_reasons(stats, included):
+    """Excluded maps per reason, e.g. 'void > 20%: 2 maps; before 3 s: 1 map' ('' if none)"""
+    from collections import Counter
+    reasons = stats.get('exclusion_reason')
+    if reasons is None:
+        return ''
+    counts = Counter(reason_category(part) for r in np.asarray(reasons)[~included] for part in str(r).split('; ') if part)
+    return '; '.join(f"{k}: {n} map{'s' if n > 1 else ''}" for k, n in counts.items())
 
 
 def summary_table(results):

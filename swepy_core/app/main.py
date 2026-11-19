@@ -1,15 +1,28 @@
+import re
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
-from tkinter.messagebox import showerror
+from tkinter.messagebox import showerror, showinfo
+
+import numpy as np
 
 from swepy_core.app import app_utils
 from swepy_core.app.output_frames import FilesPanel, HistoryPanel, SavePanel, QualityPanel, FigPanel
 from swepy_core.app.root_widgets import MenuBar
 from swepy_core.app.value_map import ValueMapWindow
-from swepy_core.app.view_frames import ImgPanel, TopPanel, LeftPanel
-from swepy_core.processing import data_utils, summary
+from swepy_core.app.view_frames import ImgPanel, TopPanel, LeftPanel, APO_SHAPES
+from swepy_core.processing import aponeurosis, data_utils, screen_labels, summary
 from swepy_core.processing.data import DcmData, NoSWEDataError
 from swepy_core.processing.io import pickle_io
+
+
+def summary_setting(key, default):
+    """Numeric user setting stored as [value], or default"""
+    value = data_utils.get_settings(key)
+    try:
+        return float(value[0]) if value else default
+    except (TypeError, ValueError):
+        return default
 
 
 class View(ttk.Frame):
@@ -49,6 +62,8 @@ class View(ttk.Frame):
         self.left_panel.reset_roi_btn['command'] = self.reset_rois
         self.left_panel.analyse_btn['command'] = self.process
         self.left_panel.value_map_btn['command'] = self.show_value_map
+        self.scale_mask = self.fhz_mask = None
+        self.apo_kind = self.apo_plane = None
 
     def set_swe_var(self):
         swe_var = data_utils.get_settings('SWE_VAR')
@@ -68,9 +83,13 @@ class View(ttk.Frame):
         self.controller = controller
 
     def reset_rois(self):
-        """Reset original ROI selection to initial values"""
+        """Reset original ROI selection to initial values (or to the suggested aponeurosis line)"""
+        if self.img_panel.is_apo():
+            self.img_panel.reset_draw()
+            self.on_shape_change()
+            return
         self.img_panel.roi_coords = self.init_roi_coords
-        self.img_panel.shape.set(self.init_roi_shape)
+        self.img_panel.shape.set(self.init_roi_shape or 'rectangle')  # default ROI: SWE box rectangle
         self.img_panel.set_rois()
 
     def process(self):
@@ -79,7 +98,14 @@ class View(ttk.Frame):
             app_utils.warn_wrong_entry()
             return
         if self.ds:
+            if self.img_panel.is_apo() and not self.img_panel.apo_result:
+                showinfo(title='No aponeurosis ROI',
+                         message='Click on the aponeurosis (Aponeurosis mode), or click points along it and '
+                                 'double-click to finish (Apo (manual) mode).')
+                return
             if self.controller.analyse():
+                if self.img_panel.is_apo():
+                    self.remember_apo_depth()
                 self.block.set(False)  # only move on (e.g. to next file of a batch) if analysis worked
         else:
             app_utils.warn_no_video()
@@ -121,6 +147,10 @@ class View(ttk.Frame):
                 self.get_swe_frames()
                 data_utils.save_usr_input(self.swe_fhz, self.max_scale)
                 data_utils.save_swe_var(self.swe_var.get())
+                screen_labels.remember(self.fhz_mask, 'fhz', value=self.swe_fhz)
+            if isinstance(self.max_scale, (int, float)) and self.max_scale:
+                screen_labels.remember(self.scale_mask, 'scale', value=self.max_scale, swe_var=self.swe_var.get())
+                self.left_panel.set_entry_status('Values saved for these screen labels', 'grey')
             self.canvas.focus_set()
         else:
             app_utils.warn_no_video()
@@ -171,6 +201,116 @@ class View(ttk.Frame):
         self.update_dcm_info()
         self.set_img_name()
         self.activate_arrowkeys()
+        self.apply_screen_labels()
+        self.set_apo_kind()
+        self.on_shape_change()
+
+    # ----- on-screen labels: fill in entries safely -----
+    def apply_screen_labels(self):
+        """Fill in scale and frequency from labels seen before; clear them for new labels"""
+        frame = self.img_array[len(self.img_array) // 2]
+        self.scale_mask = screen_labels.scale_label(frame)
+        self.fhz_mask = screen_labels.frequency_label(frame)
+        self.left_panel.show_label_crops(screen_labels.label_crop(frame, 'fhz'), screen_labels.label_crop(frame, 'scale'))
+        new = []
+        for mask, kind, var in ((self.fhz_mask, 'fhz', self.left_panel.usr_fhz),
+                                (self.scale_mask, 'scale', self.left_panel.usr_scale)):
+            if mask is None:            # label not found (other scanner layout): keep previous values
+                continue
+            known = screen_labels.recall(mask, kind)
+            if known:
+                var.set(f"{known['value']:g}")
+                if kind == 'scale' and known.get('swe_var'):
+                    self.swe_var.set(known['swe_var'])
+            else:
+                var.set('')
+                new.append('SWE fhz' if kind == 'fhz' else 'max. scale')
+        if new:
+            self.left_panel.set_entry_status(f"New on-screen label: enter {' and '.join(new)}, then Set values",
+                                             'firebrick')
+        elif self.scale_mask is not None:
+            self.left_panel.set_entry_status('Values recognised from screen labels: click Set values', 'darkgreen')
+        else:
+            self.left_panel.set_entry_status('', 'grey')
+
+    # ----- aponeurosis mode -----
+    def set_apo_kind(self):
+        """Guess plane and aponeurosis from file name (e.g. ..._TRANS_DF0_UP_1) and set reference side"""
+        name = Path(self.img_name).stem.upper()
+        kind = re.search(r'(?:^|_)(UP|LOW)(?:_|$)', name)
+        plane = re.search(r'(?:^|_)(LONG|TRANS)(?:_|$)', name)
+        self.apo_kind = kind.group(1) if kind else None
+        self.apo_plane = plane.group(1) if plane else None
+        if self.apo_kind:
+            self.img_panel.apo_side.set(1 if self.apo_kind == 'UP' else -1)
+
+    def _depth_key(self):
+        folder = str(Path(self.controller.data.path).resolve().parent)
+        return f'{folder}|{self.apo_plane}|{self.apo_kind}'
+
+    def remember_apo_depth(self):
+        """Save depth of the analysed aponeurosis, to suggest the line in the next file of the same session"""
+        depths = data_utils.get_settings('APO_DEPTHS') or {}
+        depths = depths if isinstance(depths, dict) else {}
+        depths[self._depth_key()] = self.img_panel.apo_result['info']['depth_mm']
+        data_utils.set_setting('APO_DEPTHS', depths)
+
+    def previous_apo_depth(self):
+        depths = data_utils.get_settings('APO_DEPTHS') or {}
+        return depths.get(self._depth_key()) if isinstance(depths, dict) else None
+
+    def on_shape_change(self):
+        """Show aponeurosis tools and suggest a line when the aponeurosis mode is selected"""
+        if not self.ds:
+            return
+        if self.img_panel.shape.get() == 'apo_auto':
+            self.set_apo(self.controller.compute_apo(previous_depth_mm=self.previous_apo_depth()))
+        elif self.img_panel.shape.get() == 'apo_manual':
+            self.show_apo_hint()
+        else:
+            self.img_panel.apo_status.config(text='Aponeurosis tools: choose ROI shape "Aponeurosis" or '
+                                                  '"Apo (manual)"', foreground='grey')
+
+    def apo_from_click(self, x, y):
+        self.set_apo(self.controller.compute_apo(seed=(x, y)))
+
+    def apo_from_points(self, points):
+        self.set_apo(self.controller.compute_apo(points=points))
+
+    def update_apo(self):
+        """Recompute ROIs for the current line (e.g. after changing the reference side)"""
+        result = self.img_panel.apo_result
+        if result:
+            self.set_apo(self.controller.compute_apo(rows=result['rows'], source=result['info']['line_source']))
+
+    def show_apo_hint(self):
+        n = len(self.img_panel.apo_points)
+        self.img_panel.apo_status.config(
+            text=f'Manual line: click points along the aponeurosis from the left to the right edge of the SWE box, '
+                 f'double-click to finish ({n} point{"s" if n != 1 else ""})', foreground='black')
+
+    def set_apo(self, result):
+        """Use aponeurosis ROIs and report the line descriptors, with warnings"""
+        self.img_panel.set_apo(result)
+        if not result:
+            self.img_panel.apo_status.config(text='No line found: click on the aponeurosis', foreground='firebrick')
+            return
+        info = result['info']
+        text = (f"Line ({info['line_source']}): depth {info['depth_mm']:.1f} mm, tilt {info['line_tilt_deg']:.0f}\u00b0, "
+                f"edge {info['min_edge_distance_mm']:.1f} mm. Check it follows the aponeurosis; if not, click on it.")
+        warnings = []
+        if info['edge_warning']:
+            warnings.append(f"closer than {aponeurosis.MIN_EDGE_DISTANCE_MM:g} mm to the box edge")
+        previous = self.previous_apo_depth()
+        if previous is not None and abs(info['depth_mm'] - previous) > 2:
+            warnings.append(f"depth differs by {info['depth_mm'] - previous:+.1f} mm from the previous file")
+        if info.get('bmode_line_contrast', 2) < 1.2:
+            warnings.append('faint line on B-mode')
+        if info['reference_coverage_%'] < 50:
+            warnings.append('reference band mostly outside the box')
+        if warnings:
+            text += '\nWarning: ' + '; '.join(warnings) + '.'
+        self.img_panel.apo_status.config(text=text, foreground='firebrick' if warnings else 'darkgreen')
 
 
 class Controller:
@@ -198,6 +338,53 @@ class Controller:
         self.data.analysis_swe_var = self.view.swe_var.get()
         return self.data.decode_box(cmap_loc=self.view.cmap_loc_var.get())
 
+    def compute_apo(self, seed=None, points=None, rows=None, source=None, previous_depth_mm=None):
+        """Locate the aponeurosis and build its band ROI and muscle reference ROI
+        Args:
+            seed: (x, y) click on the aponeurosis (top field of view coordinates)
+            points: (x, y) points clicked along the aponeurosis (manual line)
+            rows: existing line (box coordinates), e.g. to change the reference side
+            previous_depth_mm: depth of the aponeurosis in the previous file (suggestion)
+        Returns: dict (band, reference and line in image coordinates, rows, descriptors), or None
+        """
+        data = self.data
+        bmode, x0, y0 = data.bmode_box()
+        h, w = bmode.shape
+        px = float(data.swe.PhysicalDeltaX) * 10
+        top = data.top_fov.RegionLocationMinY0
+        if rows is None:
+            if points:
+                rows = aponeurosis.line_from_points([(x - x0, y - y0) for x, y in points], w, h)
+                source = 'manual line'
+            elif seed:
+                rows = aponeurosis.track_line(bmode, px, seed[0] - x0, seed[1] - y0)
+                source = 'click'
+            else:
+                prev_row = (previous_depth_mm / px - (y0 - top)) if previous_depth_mm is not None else None
+                rows, source = aponeurosis.suggest_line(bmode, px, prev_row)
+        rows = np.asarray(rows, dtype=float)
+        if np.all(np.isnan(rows)):
+            return None
+        half_width = summary_setting('APO_HALF_WIDTH_MM', aponeurosis.BAND_HALF_WIDTH_MM)
+        side = self.view.img_panel.apo_side.get()
+        band, band_cov = aponeurosis.band_polygon(rows, h, w, px, 0, half_width)
+        ref, ref_cov = aponeurosis.band_polygon(rows, h, w, px, aponeurosis.REF_NEAR_MM, aponeurosis.REF_FAR_MM, side)
+        if len(band) < 3:
+            return None
+        info = {'line_source': source,
+                'band_half_width_mm': half_width,
+                'depth_mm': float((y0 - top + np.nanmedian(rows)) * px),
+                **aponeurosis.geometry(rows, h, px, bmode),
+                'band_coverage_%': 100 * band_cov,
+                'reference_side': 'below' if side > 0 else 'above',
+                'reference_limits_mm': f'{aponeurosis.REF_NEAR_MM:g}-{aponeurosis.REF_FAR_MM:g}',
+                'reference_coverage_%': 100 * ref_cov}
+        valid = np.flatnonzero(~np.isnan(rows))
+        line = [(int(x0 + c), int(round(y0 + rows[c]))) for c in valid[::3]]
+        return {'band': [(x0 + c, y0 + r) for c, r in band],
+                'reference': [(x0 + c, y0 + r) for c, r in ref],
+                'line': line, 'rows': rows, 'info': info}
+
     def get_swe_array(self, swe_fhz):
         """Call method to get array of SWE unique scans"""
         return self.data.resample(swe_fhz)
@@ -216,6 +403,10 @@ class Controller:
         self.set_swe_variable()
         self.view.img_panel.get_top_coords()
         self.data.roi_coords = self.view.img_panel.roi_coords
+        self.data.roi_mode = self.view.img_panel.shape.get()
+        apo = self.view.img_panel.apo_result if self.view.img_panel.is_apo() else None
+        self.data.reference_coords = apo['reference'] if apo else None
+        self.data.apo_info = dict(apo['info']) if apo else {}
         try:
             self.data.analyse_roi(cmap_loc=self.view.cmap_loc_var.get())
         except NoSWEDataError:
@@ -398,10 +589,10 @@ class App(tk.Tk):
                     if not self.reset(path):
                         continue
                     self.view.get_usr_entry()
-                    self.view.init_roi_coords = roi_coords  # load detected or user drawn (from 1st file) roi coords
-                    self.view.init_roi_shape = roi_shape
-                    self.view.reset_rois()
-                    self.view.init_roi_coords = self.data.roi_coords  # load detected roi coords for 'reset' button
-                    self.wait_variable(self.view.block)
-                    self.view.process()
+                    if not self.view.img_panel.is_apo():  # aponeurosis ROIs are suggested for each file instead
+                        self.view.init_roi_coords = roi_coords  # detected or user drawn roi coords (1st file)
+                        self.view.init_roi_shape = roi_shape
+                        self.view.reset_rois()
+                        self.view.init_roi_coords = self.data.roi_coords  # detected roi coords for 'reset' button
+                    self.wait_variable(self.view.block)  # until the user analyses this file
                 self.nb.select(self.output)

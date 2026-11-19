@@ -4,6 +4,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from swepy_core.app import app_utils
+from swepy_core.app.view_frames import apo_mode_enabled
 from swepy_core.processing import data_utils
 
 
@@ -39,11 +40,21 @@ class MenuBar(tk.Menu):
         self.edit_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label='Edit', underline=0, menu=self.edit_menu)
         self.edit_menu.add_command(label='Settings', command=lambda: self.open_settings())
+        self.edit_menu.add_command(label='Forget remembered screen labels', command=self.forget_labels)
 
         self.help_menu = tk.Menu(self, tearoff=0)
         self.add_cascade(label='Help', underline=0, menu=self.help_menu)
         self.help_menu.add_command(label='Swepy README',
                                    command=lambda: data_utils.callback('https://tinyurl.com/swepy'))
+
+    def forget_labels(self):
+        """Delete values remembered for on-screen labels (scale, SWE frequency)"""
+        from tkinter.messagebox import askyesno
+        from swepy_core.processing import screen_labels
+        if askyesno(title='Forget screen labels',
+                    message='Forget the values remembered for on-screen scale and frequency labels? '
+                            'They will have to be entered again.'):
+            screen_labels.forget_all()
 
     def delete_history(self):
         self.history_submenu.delete(0, 'end')
@@ -111,8 +122,23 @@ class Settings(tk.Toplevel):
             radio.grid(column=grid_column, row=0, padx=(0, 10), pady=2)
             grid_column += 1
 
+        # aponeurosis mode (hidden by default) and half-width of the band around the aponeurosis (standard: 1 mm)
+        self.apo_frame = ttk.LabelFrame(self, text='Aponeurosis mode', padding=5)
+        self.apo_frame.grid(row=2, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        self.apo_enabled = tk.BooleanVar(value=apo_mode_enabled())
+        ttk.Checkbutton(self.apo_frame, text='Enable aponeurosis ROI shapes (see docs/aponeurosis_mode.md)',
+                        variable=self.apo_enabled, command=self.toggle_apo_mode).grid(row=0, column=0, columnspan=3,
+                                                                                    sticky=tk.W, pady=(0, 5))
+        ttk.Label(self.apo_frame, text='Band half-width (mm):').grid(row=1, column=0, sticky=tk.W)
+        current = data_utils.get_settings('APO_HALF_WIDTH_MM')
+        self.apo_width = tk.StringVar(value=f'{float(current[0]):g}' if current else '1')
+        ttk.Entry(self.apo_frame, width=6, textvariable=self.apo_width, validate='key',
+                  validatecommand=(self.apo_frame.register(self.is_positive_number), '%P')).grid(row=1, column=1, padx=5)
+        ttk.Label(self.apo_frame, text='standard: 1').grid(row=1, column=2, sticky=tk.W)
+        self.apo_width.trace_add('write', lambda *_: self.save_apo_width())
+
         self.close_btn = ttk.Button(self, text='Close', command=self.close)
-        self.close_btn.grid(column=0, row=2, sticky=tk.E, padx=5, pady=5)
+        self.close_btn.grid(column=0, row=3, sticky=tk.E, padx=5, pady=5)
 
         app_utils.center_window(self, parent.app)
 
@@ -127,6 +153,36 @@ class Settings(tk.Toplevel):
         self.current_value.event_generate('<<UpdateNeeded>>', when='tail')
         data_utils.save_sat_thresh(value)
         return True
+
+    @staticmethod
+    def is_positive_number(value):
+        if value == '':
+            return True
+        try:
+            return float(value) > 0
+        except ValueError:
+            return False
+
+    def toggle_apo_mode(self):
+        """Save choice and show/hide the aponeurosis ROI shapes in the current view"""
+        enabled = self.apo_enabled.get()
+        data_utils.set_setting('APO_MODE', [enabled])
+        view = self.menu.app.view
+        was_apo = view.img_panel.is_apo()
+        view.img_panel.set_apo_enabled(enabled)
+        if enabled:
+            # switch directly to the aponeurosis ROI, so the line is proposed without further steps
+            view.img_panel.shape.set('apo_auto')
+            data_utils.set_setting('ROI_SHAPE', ['apo_auto'])
+            if view.ds:
+                view.img_panel.reset_draw()
+                view.on_shape_change()
+        elif was_apo and view.ds:
+            view.reset_rois()                # back to the default ROI (SWE box)
+
+    def save_apo_width(self):
+        if self.apo_width.get():
+            data_utils.set_setting('APO_HALF_WIDTH_MM', [float(self.apo_width.get())])
 
     def close(self):
         """Restore last valid threshold if the entry was left empty, then close window"""

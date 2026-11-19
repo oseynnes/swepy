@@ -52,6 +52,18 @@ def highlight_excel(sheet, df, names, by_rows=False, index_col=False):
                 sheet.cell(row=1, column=col).font = bold
 
 
+def display_frame(df):
+    """Table converted to text for display (pandastable fails on missing values with recent pandas):
+    missing values as empty cells, numbers with 4 significant digits"""
+    def fmt(v):
+        if v is None or (isinstance(v, (float, np.floating)) and np.isnan(v)):
+            return ''
+        if isinstance(v, (float, np.floating)):
+            return f'{v:.4g}'
+        return str(v)
+    return pd.DataFrame({col: [fmt(v) for v in df[col]] for col in df.columns}, dtype=object)
+
+
 class FilesPanel(ttk.LabelFrame):
     """Panel of output tab listing analysed files"""
 
@@ -310,10 +322,25 @@ class FigPanel(ttk.Frame):
             radio.grid(column=0, row=grid_row, sticky=tk.W, pady=2)
             grid_row += 1
 
+        # plot type: time course of per-map medians (default) or distribution of values in each map
+        ttk.Separator(self.lf1).grid(column=0, row=grid_row, sticky=tk.EW, pady=4)
+        view_frame = ttk.Frame(self.lf1)
+        view_frame.grid(column=0, row=grid_row + 1, sticky=tk.W)
+        ttk.Label(view_frame, text='Plot:').pack(side=tk.LEFT)
+        saved_view = data_utils.get_settings('PLOT_VIEW')
+        self.plot_view = tk.StringVar(value=saved_view[0] if saved_view else 'time')
+        for value, text in (('time', 'Time course'), ('violin', 'Distributions')):
+            ttk.Radiobutton(view_frame, text=text, value=value, variable=self.plot_view,
+                            command=self.change_view).pack(side=tk.LEFT, padx=(5, 0))
+
         self.results_btn = ttk.Button(self.results_btn_frame, text='Display in table', command=self.display_results)
         self.results_btn.grid(row=0, column=0, padx=5, sticky=tk.W)
         self.map_btn = ttk.Button(self.results_btn_frame, text='Value map', command=self.show_value_map)
         self.map_btn.grid(row=0, column=1, padx=5, sticky=tk.W)
+
+    def change_view(self):
+        data_utils.set_setting('PLOT_VIEW', [self.plot_view.get()])
+        self.change_plot()
 
     def change_plot(self):
         """Load results and call function to refresh plot"""
@@ -322,22 +349,98 @@ class FigPanel(ttk.Frame):
         self.replot_data(self.output.results, self.plot_swe_var.get())
 
     def replot_data(self, results, swe_var):
-        """Plot distribution of values in each SWE map, highlighting per-map medians
+        """Plot per-map results: time course of medians (default) or distribution of values in each map
         Args:
             results (dict): analysis results
             swe_var: variable to plot, can only be either 'velocity', 'shear_m' or 'youngs_m'
         Returns: None
         """
         assert swe_var in summary.SWE_VARS, "'swe_var' can only be 'velocity', 'shear_m' or 'youngs_m'"
+        stats = results['stats']
         values = results['raw'][swe_var]
         n_maps = values.shape[0]
-        included = np.asarray(results['stats'].get('included', np.ones(n_maps, dtype=bool)), dtype=bool)
-        medians = summary.per_map_stats(values)['median']
+        included = np.asarray(stats.get('included', np.ones(n_maps, dtype=bool)), dtype=bool)
+        reasons = np.asarray(stats.get('exclusion_reason', [''] * n_maps), dtype=object)
         summ = summary.summarise(results)
         unit = summary.UNITS[swe_var]
+        mean_of_medians = summ[f'{swe_var}_mean_of_map_medians']
+        show_reference = 'reference_median' in stats and swe_var == summary.measured_var(results)
 
         self.figure.clear()
         axes = self.figure.add_subplot()
+        if self.plot_view.get() == 'violin':
+            x, medians = self._plot_distributions(axes, values, included)
+        else:
+            x, medians = self._plot_time_course(axes, results, values, included, show_reference)
+        if np.isfinite(mean_of_medians):
+            axes.axhline(mean_of_medians, color='C1' if self.plot_view.get() == 'violin' else 'C0', ls='--', lw=1,
+                         label=f'mean of map medians ({mean_of_medians:.2f} {unit})')
+        self._annotate_exclusions(axes, x, medians, included, reasons)
+        axes.set_ylabel(self.y_labels[swe_var])
+        axes.legend(fontsize='small', loc='best')
+
+        title = f"{results['file'][0]}\n"
+        if summ['n_maps_included']:
+            title += (f"Mean of map medians: {mean_of_medians:.2f} {unit}  "
+                      f"(SD between maps {summ[f'{swe_var}_SD_between_maps']:.2f}, "
+                      f"CV {summ[f'{swe_var}_CV%_between_maps']:.1f}%)  |  "
+                      f"{summ['n_maps_included']}/{summ['n_maps']} maps")
+        else:
+            title += 'No map passed the quality filters'
+        if summ.get('reference_mean_of_map_medians') is not None and show_reference:
+            title += (f"\nMuscle reference: {summ['reference_mean_of_map_medians']:.2f} {unit}  "
+                      f"(ratio {summ.get('main_to_reference_ratio', float('nan')):.2f})")
+        axes.set_title(title, fontsize='medium')
+        if summ.get('apo_edge_warning'):  # concerns this recording: shown as a warning
+            axes.text(.01, .98, f"Aponeurosis {summ['apo_min_edge_distance_mm']:.1f} mm from the SWE box edge "
+                                f"(edge artefacts possible).",
+                      transform=axes.transAxes, va='top', fontsize='small', color='firebrick')
+        if summ.get('scale_warning'):     # resolution of the colour scale: a recommendation for future recordings
+            # below the x axis label, so it never overlaps the data
+            axes.annotate(f"Note: few colour levels of the scale are used (median level "
+                          f"{summ['median_colour_level']:.0f} of {summ['colour_levels_in_scale']}).\n"
+                          f"For future recordings, a lower max. scale would give a finer resolution.",
+                          xy=(0.5, 0), xycoords=axes.xaxis.label, xytext=(0, -4), textcoords='offset points',
+                          ha='center', va='top', fontsize='x-small', color='dimgrey', style='italic')
+        self.figure_canvas.draw_idle()
+
+    @staticmethod
+    def _plot_time_course(axes, results, values, included, show_reference):
+        """Per-map median over time, with spread within each map (IQR) and the muscle reference
+        Returns: x positions and medians of the maps"""
+        stats = results['stats']
+        n_maps = values.shape[0]
+        if 'time_s' in stats:
+            x = np.asarray(stats['time_s'], dtype=float)
+            axes.set_xlabel('time (s)')
+        else:  # results from older versions
+            x = np.arange(1, n_maps + 1, dtype=float)
+            axes.set_xlabel('SWE map')
+        q25, medians, q75 = summary.per_map_stats(values)['q25_median_q75']
+        axes.fill_between(x, q25, q75, color='C0', alpha=.15, step='mid', label='IQR within map')
+        axes.plot(x, medians, '-', color='C0', lw=1, alpha=.5)
+        axes.plot(x[included], medians[included], 'o', color='C0', label='map median')
+        if (~included).any():
+            axes.plot(x[~included], np.nan_to_num(medians[~included], nan=0), 'x', color='grey', ms=8,
+                      mew=2, label='excluded map')
+        shown = [q25, q75, medians]
+        if show_reference:
+            ref = np.asarray(stats['reference_median'], dtype=float)
+            axes.plot(x, ref, 's-', color='darkorange', ms=4, lw=1, label='muscle reference (map medians)')
+            shown.append(ref)
+        finite = np.concatenate([np.asarray(v, float)[np.isfinite(v)] for v in shown])
+        if finite.size:
+            top = finite.max()
+            axes.set_ylim(0, top * 1.15 if top > 0 else 1)
+        return x, medians
+
+    @staticmethod
+    def _plot_distributions(axes, values, included):
+        """Distribution of values in each map (violins), with per-map medians
+        Returns: x positions and medians of the maps"""
+        n_maps = values.shape[0]
+        x = np.arange(1, n_maps + 1, dtype=float)
+        medians = summary.per_map_stats(values)['median']
         data = data_utils.filter_nans(values.tolist())
         positions = [i + 1 for i, v in enumerate(data) if len(v)]
         if positions:
@@ -347,33 +450,31 @@ class FigPanel(ttk.Frame):
                 body.set_facecolor('navy' if included[position - 1] else 'lightgrey')
                 body.set_edgecolor('#473535')
                 body.set_alpha(.5)
-            x = np.arange(1, n_maps + 1)
-            axes.scatter(x[included], medians[included], s=25, c='orange', zorder=3, label='map median')
-            if (~included).any():
-                axes.scatter(x[~included], medians[~included], s=25, c='grey', marker='x', zorder=3,
-                             label='excluded map')
-            mean_of_medians = summ[f'{swe_var}_mean_of_map_medians']
-            if np.isfinite(mean_of_medians):
-                axes.axhline(mean_of_medians, color='orange', ls='--', lw=1, label='mean of medians')
-            axes.legend(fontsize='small', loc='upper right')
+        axes.scatter(x[included], medians[included], s=25, c='orange', zorder=3, label='map median')
+        if (~included).any():
+            axes.scatter(x[~included], np.nan_to_num(medians[~included], nan=0), s=40, c='grey', marker='x',
+                         zorder=3, label='excluded map')
         axes.set_xlabel('SWE map')
-        axes.set_ylabel(self.y_labels[swe_var])
+        return x, medians
 
-        title = f"{results['file'][0]}\n"
-        if summ['n_maps_included']:
-            title += (f"Mean of map medians: {summ[f'{swe_var}_mean_of_map_medians']:.2f} {unit}  "
-                      f"(SD between maps {summ[f'{swe_var}_SD_between_maps']:.2f}, "
-                      f"CV {summ[f'{swe_var}_CV%_between_maps']:.1f}%)  |  "
-                      f"{summ['n_maps_included']}/{summ['n_maps']} maps")
-        else:
-            title += 'No map passed the quality filters'
-        axes.set_title(title, fontsize='medium')
-        if summ.get('scale_warning'):
-            axes.text(.01, .98, f"Scale too coarse for this tissue: median colour level "
-                                f"{summ['median_colour_level']:.0f} of {summ['colour_levels_in_scale']}.\n"
-                                f"Use a lower max. scale on the scanner.",
-                      transform=axes.transAxes, va='top', fontsize='small', color='firebrick')
-        self.figure_canvas.draw_idle()
+    @staticmethod
+    def _annotate_exclusions(axes, x, medians, included, reasons):
+        """Write the reason for exclusion above excluded maps; consecutive maps excluded for the same reason
+        get one label (exact values are in the per-map table)"""
+        groups, current = [], None
+        for i, (ok, reason) in enumerate(zip(included, reasons)):
+            category = summary.reason_category(str(reason)) if not ok and reason else None
+            if category and current and current['category'] == category and current['last'] == i - 1:
+                current['last'] = i
+                continue
+            current = {'category': category, 'first': i, 'last': i} if category else None
+            if current:
+                groups.append(current)
+        for g in groups:
+            idx = np.arange(g['first'], g['last'] + 1)
+            y = np.nan_to_num(medians[idx], nan=0)
+            axes.annotate(g['category'].replace('; ', '\n'), xy=(x[idx].mean(), y.max()), xytext=(0, 9),
+                          textcoords='offset points', ha='center', va='bottom', fontsize='x-small', color='dimgrey')
 
     def clear_figure(self):
         """Remove plot from preview (keeps figure and toolbar usable for the next analysis)"""
@@ -395,8 +496,8 @@ class FigPanel(ttk.Frame):
         notebook = ttk.Notebook(window)
         notebook.pack(fill=tk.BOTH, expand=True)
         rows, columns = main_result_names(results)
-        for name, df in (('Summary', summary.summary_table(results).astype({'value': str})),
-                         ('Per map', summary.per_map_table(results))):
+        for name, df in (('Summary', display_frame(summary.summary_table(results))),
+                         ('Per map', display_frame(summary.per_map_table(results)))):
             frame = ttk.Frame(notebook)
             notebook.add(frame, text=name)
             table = pandastable.Table(frame, dataframe=df)

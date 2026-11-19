@@ -81,8 +81,10 @@ and unit measured (the **Scale variable** chosen for the analysis). It is given 
 SWE maps") and highlighted in the table window and in Excel files, together with the per-map median of that
 variable. The measured variable is listed before the two others, which are converted from it.
 
-The **Results** tab plots the distribution of values in each SWE map, with its median (orange dot).
-Maps excluded by the quality filters are shown in grey. **Display in table** shows the summary and per-map tables,
+The **Results** tab plots the median of each SWE map over time, with the spread of values within each map
+(interquartile range, shaded) and the mean of map medians (dashed line); in aponeurosis mode, the muscle reference
+is plotted too. Maps excluded by the quality filters are shown as grey crosses, labelled with the reason for exclusion.
+*Plot: Distributions* shows the distribution of values in each map instead (violin plots). **Display in table** shows the summary and per-map tables,
 and **Value map** shows the analysed ROI map by map.
 
 **Quality filters** are set in the Results tab: maximal % of void pixels (default 20 %), maximal % of saturated pixels
@@ -93,9 +95,11 @@ analysed files in the list (no new analysis needed) and to future analyses; **De
 - a **summary** (Excel sheet `summary`, or `<name>_summary.csv`): one value per recording.
   It starts with the main result (`main_result`), followed by the same statistic for each variable (`<variable>_mean_of_map_medians`).
   It also gives the variation between maps (`SD`, `CV%`), the median spread within maps (`median_IQR_within_maps`),
-  the number of included maps, the analysis settings, and a `scale_warning` (see below).
+  the number of included and excluded maps with the reasons for exclusion (`exclusion_reasons`), the analysis
+  settings, and a `scale_warning` (see below).
 - a **per-map table** (Excel sheet `per_map`, or `<name>.csv`): one row per SWE map, with its DICOM frame number,
-  time (s), inclusion flag, % void and saturated pixels, and median, IQR, mean and SD of each variable.
+  time (s), inclusion flag and reason for exclusion (`exclusion_reason`), % void and saturated pixels,
+  and median, IQR, mean and SD of each variable.
 
 **Combine selection...** writes one table with the summaries of the files selected in the list
 (e.g. repeated acquisitions of the same condition), followed by their mean, SD and CV% between files.
@@ -111,6 +115,19 @@ These are stored in a user folder, independent of where swepy is installed:
 - Linux: `~/.local/share/swepy`
 
 Set the `SWEPY_HOME` environment variable to use another folder.
+
+### Aponeurosis mode
+For thin structures such as aponeuroses, enable the aponeurosis mode in **Edit > Settings** (hidden by default),
+then choose **ROI shape: Aponeurosis**. swepy locates the aponeurosis on the
+B-mode image (suggested automatically, or followed from a click on it), and measures SWV in a standard band of
+±1 mm around it, together with a muscle reference band 3–8 mm away. **Apo (manual)** builds the same band from
+points clicked along the aponeurosis. Quality descriptors (depth, tilt, distance from the SWE box edge, visibility)
+are exported with the results (`apo_` fields).
+
+swepy also remembers the values entered for the on-screen scale and frequency labels: files showing the same
+labels are filled in automatically, and new labels must be entered.
+
+See the step-by-step guide: [docs/aponeurosis_mode.md](docs/aponeurosis_mode.md).
 
 ### How the analysis works
 1. **One frame per SWE map.** SWE maps are refreshed less often than B-mode frames, so a cine loop shows each map over several frames.
@@ -134,7 +151,8 @@ Set the `SWEPY_HOME` environment variable to use another folder.
    (`in_5_most_stable_maps`) and their mean is reported. Because this selection is based on the result itself,
    it is meant as a check, not as the main outcome.
 7. **Scale check.** The median colour level of included pixels is reported (out of ~110 levels in the colour bar).
-   Below 10 levels, values are too coarsely quantised and `scale_warning` is set: use a lower max. scale on the scanner.
+   Below 10 levels, the resolution of the measurement is limited: `scale_warning` is set and a short note is shown
+   on the plot. For future recordings, a lower max. scale on the scanner gives finer resolution.
 
 ### Measuring reliably
 Frames of one recording share the same probe placement, so they cannot capture the main sources of measurement error.

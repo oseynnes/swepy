@@ -416,14 +416,12 @@ def mean_lowest_stdev_subarray(arr, return_mask=False, n=5):
     # Check if the input is a 2D array
     if arr.ndim == 2:
         if arr.shape[0] < n:  # rows are frames
-            print(f'Fewer than {n} values available. Using only {arr.shape[0]} frames.')
             min_n_frame = arr.shape[0]
 
         # Compute the mean of each column to form a 1D array
         mean_array = np.nanmean(arr, axis=1)
     elif arr.ndim == 1:
         if len(arr) < n:
-            print(f'Fewer than {n} values available. Using only {len(arr)} frames.')
             min_n_frame = len(arr)
 
         mean_array = arr

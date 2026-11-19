@@ -41,6 +41,11 @@ class DcmData:
         self.pixel_xy = None  # (x, y) image coordinates of ROI pixels
         self.colour_indices = None  # position of each ROI pixel along the colour bar (0 = top, float)
         self.cmap_loc = None
+        self.roi_mode = None  # 'rectangle', 'polygon', 'apo_auto' or 'apo_manual'
+        self.reference_coords = None  # optional reference ROI (e.g. muscle next to an aponeurosis)
+        self.reference_values = None
+        self.apo_info = {}  # aponeurosis line descriptors (see processing.aponeurosis.geometry)
+        self._bmode_box = None
         self.swe_fhz = None
         self.max_scale = None
         if tkinter._default_root is not None:
@@ -135,6 +140,17 @@ class DcmData:
                            'frame_rate': round(self.bmode_fhz, 2)}
         self.swe_array = self.img_array[self.swe_indices, :, :]
         return self.swe_array
+
+    def bmode_box(self):
+        """Time-averaged B-mode image of the SWE box region, from the field of view without colour overlay
+        Returns: (image (height, width), x0, y0) with x0, y0 the box origin in the top field of view
+        """
+        if self._bmode_box is None:
+            (x0, y0), (x1, y1) = self.get_roi_coord(self.swe, offset=0)
+            yb = y0 + self.fov_y_offset
+            region = self.img_array[:, yb:yb + (y1 - y0), x0:x1, :]
+            self._bmode_box = (region.astype(np.float32).mean(axis=(0, 3)), x0, y0)
+        return self._bmode_box
 
     def get_rois(self, img_arr):
         """Index sub-array of image frames at SWE ROI coordinates"""
@@ -236,6 +252,14 @@ class DcmData:
         values[~self.colour_mask(box)] = np.nan
         return values, x0, y0
 
+    def decode_polygon(self, coords):
+        """Values in a polygon for each SWE map (NaN for void pixels), without changing the main ROI"""
+        coords_arr = np.asarray(coords)
+        rr, cc = polygon(coords_arr[:, 0], coords_arr[:, 1])
+        rgb = self.swe_array[:, cc, rr, :]
+        values = self.positions_to_values(data_utils.colour_positions(rgb, self.colour_profile))
+        return np.where(self.colour_mask(rgb), values, np.nan)
+
     def analyse_roi(self, cmap_loc):
         """Calculate stat parameter of interest for ROIs of each frame"""
         self.cmap_loc = cmap_loc
@@ -254,6 +278,8 @@ class DcmData:
         self.void_percent = self.calc_pixel_percent(voided_pxls)
         if np.all(self.void_percent == 100):
             raise NoSWEDataError('No elastography data in the selected ROI')
+        self.reference_values = (self.decode_polygon(self.reference_coords)
+                                 if self.reference_coords and len(self.reference_coords) > 2 else None)
         self.gen_results()
 
     def gen_results(self):
@@ -274,6 +300,7 @@ class DcmData:
         stats['dicom_frame'] = frame_idx + 1  # 1-based, as the frame counter on screen
         stats['time_s'] = np.round(frame_idx * self.frame_time_ms / 1000, 3)
         stats['included'] = np.ones(n_maps, dtype=bool)  # set by quality filters below
+        stats['exclusion_reason'] = np.full(n_maps, '', dtype=object)
         stats['%_void'] = self.void_percent
         stats[f'%_saturated (> {sat_thresh}% maxscale)'] = self.saturated_percent
         for target_var in summary.SWE_VARS:
@@ -284,11 +311,15 @@ class DcmData:
                                                               self.analysis_swe_var,
                                                               target_var)
             for stat, values in summary.per_map_stats(d['raw'][target_var]).items():
+                if stat == 'q25_median_q75':
+                    continue
                 stats[f'{target_var}_{stat}'] = values
         # colour level of pixels above the bottom of the colour bar: indicates measurement resolution
         n_levels = self.colour_profile.shape[0] - 1
         levels = np.where(np.isnan(self.filtered_values), np.nan, n_levels - self.colour_indices)
         stats['median_colour_level'] = summary.per_map_stats(levels)['median']
+        if self.reference_values is not None:  # reference ROI (e.g. adjacent muscle), in the measured variable
+            stats['reference_median'] = summary.per_map_stats(self.reference_values)['median']
 
         resampling = self.resampling or {}
         d['meta'] = {'analysis_variable': self.analysis_swe_var,
@@ -299,11 +330,15 @@ class DcmData:
                      'median_colour_level': np.nan,  # set by quality filters
                      'scale_warning': False,
                      'roi_shape': self.roi_shape,
+                     'roi_mode': self.roi_mode or self.roi_shape,
                      'roi_pixels': int(self.filtered_values.shape[1]),
+                     'reference_pixels': (int(self.reference_values.shape[1])
+                                          if self.reference_values is not None else 0),
                      'frame_time_ms': round(self.frame_time_ms, 3),
                      'swe_refresh_period_frames': resampling.get('period_frames'),
                      'swe_refresh_detection': resampling.get('method'),
                      'saturation_threshold_%_of_max_scale': sat_thresh,
                      'swepy_version': swepy_core.__version__}
+        d['meta'].update({f'apo_{k}': v for k, v in self.apo_info.items()})
         summary.apply_quality(d)
         self.results = d
