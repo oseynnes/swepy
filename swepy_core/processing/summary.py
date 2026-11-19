@@ -168,8 +168,8 @@ def summarise(results):
     included = np.asarray(stats.get('included', np.ones(n_maps, dtype=bool)), dtype=bool)
     summary = {'file': results['file'][0],
                'folder': str(results['file'][1]),
-               'main_result': np.nan,
-               'main_result_description': '',
+               'mean_of_map_medians': np.nan,
+               'variable': '',
                'n_maps': n_maps,
                'n_maps_included': int(included.sum()),
                'n_maps_excluded': int((~included).sum()),
@@ -197,13 +197,12 @@ def summarise(results):
         ref = ref[~np.isnan(ref)]
         summary['reference_mean_of_map_medians'] = float(np.mean(ref)) if len(ref) else np.nan
     if measured:
-        summary['main_result'] = summary[f'{measured}_{MAIN_STAT}']
+        summary['mean_of_map_medians'] = summary[f'{measured}_{MAIN_STAT}']
         if 'reference_mean_of_map_medians' in summary:
-            summary['main_to_reference_ratio'] = summary['main_result'] / summary['reference_mean_of_map_medians']
-        summary['main_result_description'] = (f'{LABELS[measured]} ({UNITS[measured]}), '
-                                              f'mean of the medians of included SWE maps')
-    first = ('file', 'folder', 'main_result', 'main_result_description', 'reference_mean_of_map_medians',
-             'main_to_reference_ratio')
+            summary['ratio_to_reference'] = summary['mean_of_map_medians'] / summary['reference_mean_of_map_medians']
+        summary['variable'] = f'{LABELS[measured]} ({UNITS[measured]})'
+    first = ('file', 'folder', 'mean_of_map_medians', 'variable', 'reference_mean_of_map_medians',
+             'ratio_to_reference')
     summary = {**{k: summary[k] for k in first if k in summary}, **summary}
     summary.update(results.get('meta', {}))
     return summary
@@ -242,8 +241,8 @@ def combine(results_list):
     df = pd.DataFrame([summarise(results) for results in results_list])
     if len(df) > 1:
         value_cols = [c for c in df.columns if c.startswith(SWE_VARS)]
-        if df['main_result_description'].nunique() == 1:  # main results comparable (same variable)
-            value_cols = ['main_result'] + value_cols
+        if df['variable'].nunique() == 1:  # results comparable (same measured variable)
+            value_cols = ['mean_of_map_medians'] + value_cols
         values = df[value_cols].apply(pd.to_numeric, errors='coerce')
         mean, sd = values.mean(), values.std(ddof=1)
         rows = pd.DataFrame([mean, sd, 100 * sd / mean])

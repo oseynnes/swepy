@@ -15,7 +15,7 @@ scanned longitudinally (**LONG**) and transversally (**TRANS**), with SWE scales
 - The ROI is a **band of ±1 mm** around the aponeurosis line (green), across the SWE box minus a 1 mm margin.
 - A **muscle reference** band (orange, 3–8 mm from the aponeurosis) is measured at the same time:
   below the superficial aponeurosis (UP), above the deep one (LOW), i.e. in the same muscle.
-- The result is the **mean of the per-map medians of SWV in the band** (`main_result`, in m/s), with the
+- The result is the **mean of the per-map medians of SWV in the band** (`mean_of_map_medians`, in m/s), with the
   muscle reference and the ratio of both.
 
 Because of the limited resolution of SWE, the values describe the **aponeurosis region**, not the aponeurosis
@@ -28,7 +28,7 @@ neighbouring muscle. A reference measured in that muscle, in the same image, hel
 aponeurosis values:
 
 - **Checking that the band measures the aponeurosis.** In a valid recording, SWV in the aponeurosis band is
-  higher than in the adjacent muscle (`main_to_reference_ratio` > 1; about 1.3–1.5 in the longitudinal pilot
+  higher than in the adjacent muscle (`ratio_to_reference` > 1; about 1.3–1.5 in the longitudinal pilot
   recordings). A ratio close to 1 suggests that the band does not capture a distinct structure: line on the wrong
   structure, aponeurosis poorly visible, or no SWV contrast in this plane. Such recordings should be checked.
 - **Telling aponeurosis changes from muscle changes.** Joint angle, contraction or blood flow restriction can
@@ -45,7 +45,7 @@ Notes:
 - The reference is placed in the **same muscle** for both aponeuroses: below the superficial aponeurosis (UP),
   above the deep one (LOW). This is why the side is set from the file name.
 - The ratio is not a better outcome by itself: in the pilot data it did not reduce the day-to-day error compared
-  with the aponeurosis band alone. Use it as a check and for interpretation, alongside `main_result`.
+  with the aponeurosis band alone. Use it as a check and for interpretation, alongside `mean_of_map_medians`.
 - Check `apo_reference_coverage_%`: when much of the reference band falls outside the SWE box, the reference is
   less reliable.
 
@@ -135,9 +135,9 @@ The exported summary (Excel sheet `summary`) starts with:
 
 | Field | Meaning |
 |---|---|
-| `main_result` | mean of the per-map medians of SWV in the aponeurosis band (m/s) |
+| `mean_of_map_medians` | mean of the per-map medians of SWV in the aponeurosis band (m/s) |
 | `reference_mean_of_map_medians` | same, in the muscle reference band |
-| `main_to_reference_ratio` | aponeurosis / muscle |
+| `ratio_to_reference` | aponeurosis / muscle |
 
 and describes the ROI in fields starting with `apo_`:
 

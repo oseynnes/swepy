@@ -22,7 +22,7 @@ HIGHLIGHT = 'FFF2CC'  # Excel fill colour of the main result
 def main_result_names(results):
     """Names of summary rows and per-map columns holding the main result of a recording"""
     measured = summary.measured_var(results)
-    rows = ['main_result', 'main_result_description']
+    rows = ['mean_of_map_medians', 'variable']
     columns = [f'{measured}_median'] if measured else []
     return rows, columns
 
@@ -218,7 +218,7 @@ class SavePanel(ttk.LabelFrame):
         else:
             with pd.ExcelWriter(path, engine='openpyxl') as writer:
                 combined.to_excel(writer, index=False, sheet_name='combined')
-                highlight_excel(writer.sheets['combined'], combined, ['main_result', 'main_result_description'])
+                highlight_excel(writer.sheets['combined'], combined, ['mean_of_map_medians', 'variable'])
 
 
 class QualityPanel(ttk.LabelFrame):
@@ -389,7 +389,7 @@ class FigPanel(ttk.Frame):
             title += 'No map passed the quality filters'
         if summ.get('reference_mean_of_map_medians') is not None and show_reference:
             title += (f"\nMuscle reference: {summ['reference_mean_of_map_medians']:.2f} {unit}  "
-                      f"(ratio {summ.get('main_to_reference_ratio', float('nan')):.2f})")
+                      f"(ratio {summ.get('ratio_to_reference', float('nan')):.2f})")
         axes.set_title(title, fontsize='medium')
         if summ.get('apo_edge_warning'):  # concerns this recording: shown as a warning
             axes.text(.01, .98, f"Aponeurosis {summ['apo_min_edge_distance_mm']:.1f} mm from the SWE box edge "

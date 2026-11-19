@@ -77,8 +77,7 @@ With the virtual environment activated, start the application with:
 ### Results and outputs
 The **main result** of each recording is the **mean of the medians of the included SWE maps**, in the variable
 and unit measured (the **Scale variable** chosen for the analysis). It is given first in the summary
-(`main_result`, with a `main_result_description` such as "Shear modulus (kPa), mean of the medians of included
-SWE maps") and highlighted in the table window and in Excel files, together with the per-map median of that
+(`mean_of_map_medians`, with the measured `variable`, such as "Shear modulus (kPa)") and highlighted in the table window and in Excel files, together with the per-map median of that
 variable. The measured variable is listed before the two others, which are converted from it.
 
 The **Results** tab plots the median of each SWE map over time, with the spread of values within each map
@@ -93,7 +92,8 @@ analysed files in the list (no new analysis needed) and to future analyses; **De
 
 **Export (CSV or Excel)** writes, next to each DICOM file:
 - a **summary** (Excel sheet `summary`, or `<name>_summary.csv`): one value per recording.
-  It starts with the main result (`main_result`), followed by the same statistic for each variable (`<variable>_mean_of_map_medians`).
+  It starts with the main result (`mean_of_map_medians`, in the measured `variable`), followed by the same statistic
+  for each variable (`<variable>_mean_of_map_medians`).
   It also gives the variation between maps (`SD`, `CV%`), the median spread within maps (`median_IQR_within_maps`),
   the number of included and excluded maps with the reasons for exclusion (`exclusion_reasons`), the analysis
   settings, and a `scale_warning` (see below).
@@ -103,7 +103,7 @@ analysed files in the list (no new analysis needed) and to future analyses; **De
 
 **Combine selection...** writes one table with the summaries of the files selected in the list
 (e.g. repeated acquisitions of the same condition), followed by their mean, SD and CV% between files.
-The mean, SD and CV% of `main_result` are only given if all files were measured with the same variable.
+The mean, SD and CV% of `mean_of_map_medians` are only given if all files were measured with the same variable.
 
 Variables: wave velocity (m/s), shear modulus μ (kPa) and Young's modulus E (kPa).
 
