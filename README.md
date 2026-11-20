@@ -1,10 +1,11 @@
 ![](./src/logo.001.png)
 
 # Documentation
-Swepy is a basic user interface to load and analyse shear wave elastography files recorded with **Hologic Supersonic** machines.
+swepy is a graphical interface to load and analyse shear wave elastography (SWE) cine loops recorded with **Hologic Supersonic** machines (DICOM files).
 
-The analysis currently consists in a graphical preview of the elastography measurements for each frame (violin plots), and calculations of mean and median values.
-Results can be exported to a `csv` or `xlsx` file.
+It converts the colours of each SWE map back to values (wave velocity, shear modulus and Young's modulus) within a region of interest (ROI),
+summarises each map by its median, filters out poor-quality maps, and plots the results over time.
+Results can be exported to `csv` or `xlsx` files.
 
 
 ## Get started
@@ -50,29 +51,45 @@ With the virtual environment activated, start the application with:
   ```
 
 ### Basic workflow
-1. Load a DICOM file containing an image sequence (generally a video clip, takes a few seconds)
-2. Enter the following parameters found on the image frame, then click **Set values**:
-    - acquisition frequency of SWE frames (`SWE fhz` parameter, e.g. "Pen/1.6 Hz" on screen).
-    - maximal scale value (`max. scale` parameter, e.g. "≥600 kPa" or "≥20.0 m/s" above the colour bar).
+1. Load a DICOM file containing a cine loop with **File > Open...** (loading takes a few seconds).
+   Several files can be selected: they are opened one after another, with the ROI of the first file.
+2. Enter the following parameters, read on the image, then click **Set values**:
+    - acquisition frequency of SWE maps (`SWE fhz`, e.g. "Pen/2.0 Hz" under "SWE" on the left of the screen).
+    - maximal scale value (`max. scale`, e.g. "≥300 kPa" or "≥20.0 m/s" above the colour bar).
     - the variable of the scale (**Scale variable**): **V (m/s)** for a scale in m/s; for a scale in kPa,
       **E (kPa)** if the scanner displays Young's modulus or **μ (kPa)** if it displays shear modulus.
       The Mach30 can display either, and the image only shows "kPa": check the scanner's elasticity setting
       (and record it in your protocol). A wrong choice changes all values by a factor of 3.
 
-|![](./src/sc1.png)|![](./src/sc2.png)|
-|---|---|
+   Enlarged copies of both labels are shown under the entries, to read them easily. swepy remembers the values
+   entered for each label: files showing the same labels are filled in automatically, and new labels must be entered.
 
-![](./src/sc0.png)
+   <p>
+   <img src="./src/sc1.png" alt="SWE frequency label on the scanner screen" width="200">
+   <img src="./src/sc2.png" alt="Maximal scale label above the colour bar" width="200">
+   </p>
 
-3. Click **Value map** to see the decoded values over the whole SWE box, with a depth profile.
-   Stiff structures (aponeuroses, fascia) appear as bright bands: draw the ROI (rectangle or polygon) within the muscle, away from them.
+   ![Image processing tab](./src/sc0.png)
 
-![](./src/value_map.png)
+3. Adjust the ROI on either view (**ROI shape**: rectangle or polygon). A rectangle within the SWE box is suggested; **Reset ROI** restores it.
+4. Optionally, click **Value map** to check the ROI before analysing (see below).
+5. Click **Analyse**.
+6. View and export results from the **Results** tab.
 
-4. Click **Analyse**.
-5. View and export results from the **Results** tab.
+   ![Results tab](./src/sc3.png)
 
-![](./src/sc3.png)
+### Value map
+The colour-coded SWE map is hard to read by eye, especially for values at the bottom of the scale.
+**Value map** shows the values decoded by swepy over the whole SWE box, one SWE map at a time (slider), with the
+current ROI outlined and the median value at each depth (right panel; dashed line: all maps).
+Use it to check where the ROI lies relative to heterogeneities before analysing: stiff structures such as aponeuroses
+or fascia appear as bright bands or peaks in the depth profile, and areas without SWE signal are left blank.
+Draw the ROI within the tissue of interest, away from them.
+In the **Results** tab, **Value map** shows the analysed ROI of each map, with excluded maps labelled, to check unusual values.
+
+<p align="center">
+<img src="./src/value_map.png" alt="Value map window" width="520">
+</p>
 
 ### Results and outputs
 The **main result** of each recording is the **mean of the medians of the included SWE maps**, in the variable
@@ -124,9 +141,6 @@ B-mode image (suggested automatically, or followed from a click on it), and meas
 points clicked along the aponeurosis. Quality descriptors (depth, tilt, distance from the SWE box edge, visibility)
 are exported with the results (`apo_` fields).
 
-swepy also remembers the values entered for the on-screen scale and frequency labels: files showing the same
-labels are filled in automatically, and new labels must be entered.
-
 See the step-by-step guide: [docs/aponeurosis_mode.md](docs/aponeurosis_mode.md).
 
 ### How the analysis works
@@ -166,7 +180,7 @@ Frames of one recording share the same probe placement, so they cannot capture t
   and assess reliability between acquisitions (e.g. ICC, SEM, CV) with **Combine selection...**.
 - During contractions or other changes over time, select maps with an external criterion (e.g. stable force),
   using the `time_s` column to synchronise SWE maps with other recordings.
-- For muscle, the shear modulus or the wave velocity are often preferred to Young's modulus, because E = 3μ assumes an isotropic tissue
+- For muscle, the shear modulus or the wave velocity are often preferred to Young's modulus, because E = 3μ assumes an isotropic tissue.
   Whatever the scanner displays, swepy converts values to all three variables.
 
 ### Notes and limitations
@@ -184,8 +198,8 @@ Frames of one recording share the same probe placement, so they cannot capture t
 - Version 0.2.0 changed the frame selection, the colour bar sampling and the conversion of m/s scales: results can differ from earlier versions, especially for scales in m/s and for soft tissue measured with a large scale.
 - Version 0.3.0 decodes colours between colour bar rows (see "How the analysis works"): results change little for tissue mid-scale
   (< 2 % in our tests) but can change more for tissue at the bottom of the scale.
-- The script works with **DICOM files** and is optimised for Mach30 machines but should work with other machines from the Mach range.
-Scans from Aixplorer machines also seem to be compatible but have not yet been tested thoroughly.
+- swepy works with **DICOM files** and is optimised for Mach30 machines but should work with other machines from the Mach range.
+  Scans from Aixplorer machines also seem to be compatible but have not yet been tested thoroughly.
 
 ## Acknowledgements
 I am grateful to Neil Cronin (University of Jyväskylä) for his input early in the project.  
