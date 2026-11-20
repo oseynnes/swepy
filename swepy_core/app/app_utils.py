@@ -60,7 +60,6 @@ def log_entry(name, string_var, ttk_table, row_id, var_type=float):
                          index=idx,
                          iid=row_id,
                          values=(name, value))
-    string_var.set('')
     return value
 
 

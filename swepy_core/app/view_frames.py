@@ -11,6 +11,50 @@ ROI_SHAPES = {'rectangle': 'Rectangle', 'polygon': 'Polygon',
 APO_SHAPES = ('apo_auto', 'apo_manual')
 
 
+class ImageCanvas(tk.Canvas):
+    """Canvas displaying the image, or a magnified part of it, with items drawn in image coordinates.
+
+    Items are created with image pixel coordinates (as used for the analysis) and converted to display
+    coordinates here, so ROI drawing works the same whether the view is zoomed or not.
+    Display coordinates: (image - origin) * zoom
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.origin = (0, 0)  # image coordinates of the top left corner of the displayed area
+        self.zoom = 1.0
+
+    def set_view(self, origin=(0, 0), zoom=1.0):
+        self.origin = origin
+        self.zoom = zoom
+
+    def is_zoomed(self):
+        return self.zoom != 1.0 or self.origin != (0, 0)
+
+    def to_display(self, args):
+        """Convert coordinates (flat or as (x, y) points) from image to display coordinates"""
+        if not self.is_zoomed():
+            return args
+        flat = tk._flatten(args)
+        return [(v - self.origin[i % 2]) * self.zoom for i, v in enumerate(flat)]
+
+    def to_image(self, x, y):
+        """Image pixel coordinates of a display point (e.g. a mouse click)"""
+        return int(x / self.zoom + self.origin[0]), int(y / self.zoom + self.origin[1])
+
+    def create_line(self, *args, **kw):
+        return super().create_line(*self.to_display(args), **kw)
+
+    def create_rectangle(self, *args, **kw):
+        return super().create_rectangle(*self.to_display(args), **kw)
+
+    def create_polygon(self, *args, **kw):
+        return super().create_polygon(*self.to_display(args), **kw)
+
+    def create_oval(self, *args, **kw):
+        return super().create_oval(*self.to_display(args), **kw)
+
+
 def apo_mode_enabled():
     """Whether the aponeurosis mode is enabled (Edit > Settings; disabled by default)"""
     value = data_utils.get_settings('APO_MODE')
@@ -96,7 +140,7 @@ class LeftPanel(ttk.Frame):
         self.tree_frame = ttk.Frame(self)
         self.tree_frame.grid(row=2, column=0, sticky=tk.NSEW)
         self.tree_frame.columnconfigure(0, weight=1)
-        self.tree_frame.rowconfigure(0, weight=1)
+        self.tree_frame.rowconfigure(3, weight=1)  # spare space goes below the ROI description, buttons stay at the bottom
         columns = ('dcm_property', 'value')
         self.var_names = ('Scan ID',
                           'Date/time',
@@ -114,15 +158,23 @@ class LeftPanel(ttk.Frame):
         self.tv.column('value', width=text_width('00/00/0000 00:00:00'), stretch=True)
         self.tv.grid(row=0, column=0, columnspan=3, sticky=tk.NSEW)
 
+        # size and depth of the ROI, then a status line: how to draw the ROI, or the outcome of the analysis
+        wrap = text_width('x' * 34)
+        self.roi_info = ttk.Label(self.tree_frame, text='', wraplength=wrap)
+        self.roi_info.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
+        self.roi_hint = ttk.Label(self.tree_frame, text='', foreground='grey', wraplength=wrap)
+        self.roi_hint.grid(row=2, column=0, columnspan=3, sticky=tk.W)
+        self.roi_state = None  # last ROI description and hint (the status line changes when they change)
+
         self.reset_roi_btn = ttk.Button(self.tree_frame, text="Reset ROI")
-        self.reset_roi_btn.grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.reset_roi_btn.grid(row=4, column=0, sticky=tk.W, pady=5)
 
         # shows decoded values over the whole SWE box, to place the ROI away from stiff structures
         self.value_map_btn = ttk.Button(self.tree_frame, text="Value map")
-        self.value_map_btn.grid(row=1, column=1, padx=5, pady=5)
+        self.value_map_btn.grid(row=4, column=1, padx=5, pady=5)
 
         self.analyse_btn = ttk.Button(self.tree_frame, text="Analyse")
-        self.analyse_btn.grid(row=1, column=2, sticky=tk.E, pady=5)
+        self.analyse_btn.grid(row=4, column=2, sticky=tk.E, pady=5)
 
     def show_label_crops(self, fhz_crop, scale_crop, zoom=2):
         """Display enlarged crops of the frequency and scale labels of the image"""
@@ -139,6 +191,18 @@ class LeftPanel(ttk.Frame):
     def set_entry_status(self, text, colour):
         self.entry_status.config(text=text, foreground=colour)
 
+    def set_roi_info(self, text, hint=''):
+        """Describe the ROI; the status line shows the drawing hint again only when the ROI or shape changes
+        (so the outcome of an analysis stays visible while browsing frames)"""
+        if (text, hint) == self.roi_state:
+            return
+        self.roi_state = (text, hint)
+        self.roi_info.config(text=text)
+        self.roi_hint.config(text=hint, foreground='grey')
+
+    def set_analyse_status(self, text, colour='darkgreen'):
+        self.roi_hint.config(text=text, foreground=colour)
+
     def log_swe_var(self):
         """Save last chosen SWE variable"""
         data_utils.save_swe_var(self.view.swe_var.get())
@@ -152,9 +216,11 @@ class ImgPanel(ttk.Frame):
 
         self.view = parent
 
-        # NB: images are displayed at their native size (1 image pixel = 1 canvas pixel),
-        # because ROI coordinates drawn on the canvas are used directly as image indices.
-        self.canvas = tk.Canvas(self, width=720, height=540, bg='black', cursor="cross")
+        # NB: ROI coordinates are image pixel indices. The canvas converts them to display coordinates
+        # (native size, or the bottom B-mode view magnified, see ImageCanvas and zoom_bmode).
+        self.canvas = ImageCanvas(self, width=720, height=540, bg='black', cursor="cross")
+        saved_zoom = data_utils.get_settings('ZOOM_BMODE')
+        self.zoom_bmode = tk.BooleanVar(value=bool(saved_zoom and saved_zoom[0]))
         self.grid(row=1, column=1, sticky=tk.NSEW, padx=5, pady=(0, 5))
 
         self.n_frames = 0
@@ -163,6 +229,7 @@ class ImgPanel(ttk.Frame):
                                'x1': int(self.canvas['width']),
                                'y1': int(self.canvas['height']) / 2}
 
+        self.bot_fov_coords = None  # bottom field of view (B-mode image), from the DICOM regions
         self.fov_y_offset = 225  # default for Mach30 top/bottom layout, replaced by DICOM value
         self.new_roi = tk.BooleanVar()
         self.new_roi.set(True)
@@ -170,6 +237,7 @@ class ImgPanel(ttk.Frame):
         self.polyg_top = self.polyg_down = None
 
         self.current_array = None
+        self.swe_frames = None  # DICOM frame numbers (1-based) of the SWE maps, once SWE fhz is set
         self.img = None
         self.img_name = None
 
@@ -250,6 +318,79 @@ class ImgPanel(ttk.Frame):
     def activate_draw(self):
         self.canvas.bind('<Button-1>', self.on_button_press)
         self.canvas.bind("<Double-1>", self.on_double_click)
+        # remove the last point of a polygon or manual aponeurosis line being drawn
+        for sequence in ('<BackSpace>', '<Delete>', '<Button-2>', '<Button-3>'):  # right click: 2 on macOS, 3 elsewhere
+            self.canvas.bind(sequence, self.undo_point)
+
+    def roi_changed(self):
+        """Update the ROI description (size, depth) in the left panel"""
+        self.view.update_roi_info()
+
+    def undo_point(self, event=None):
+        """Remove the last point of the ROI or manual aponeurosis line being drawn"""
+        shape = self.shape.get()
+        if shape == 'apo_manual':
+            if self.apo_points and not self.apo_result:
+                self.apo_points.pop()
+                self.draw_apo()
+                self.view.show_apo_hint()
+            return
+        if shape not in ('rectangle', 'polygon') or self.new_roi.get() or not self.roi_coords:
+            return  # nothing being drawn (a finished ROI is redrawn from scratch instead)
+        self.roi_coords.pop()
+        self.canvas.delete(self.polyg_top, self.polyg_down)
+        if len(self.roi_coords) == 1:
+            self.draw_first_point()
+        elif len(self.roi_coords) > 1:
+            self.draw_rois()
+        self.roi_changed()
+
+    def draw_first_point(self):
+        """Mark the first point of a ROI being drawn, in both fields of view"""
+        x, y = self.roi_coords[0]
+        pt_coords = (x - 1, y - 1, x + 1, y + 1)
+        self.polyg_top = self.canvas.create_oval(pt_coords, fill='green', outline='green', width=5)
+        self.polyg_down = self.canvas.create_oval(self.mirror_coords(pt_coords), fill='green', outline='green',
+                                                  width=5)
+
+    def bmode_region(self):
+        """Image coordinates (x0, y0, x1, y1) of the bottom field of view (B-mode image without colour),
+        from the DICOM regions (or the top field of view shifted by the offset between views if unavailable)"""
+        if self.bot_fov_coords:
+            fov = self.bot_fov_coords
+            return int(fov['x0']), int(fov['y0']), int(fov['x1']), int(fov['y1'])
+        fov = self.top_fov_coords
+        return (int(fov['x0']), int(fov['y0'] + self.fov_y_offset),
+                int(fov['x1']), int(fov['y1'] + self.fov_y_offset))
+
+    def update_view(self, height, width):
+        """Set displayed area: whole image, or bottom field of view magnified to the size of the image"""
+        if not self.zoom_bmode.get():
+            self.canvas.set_view()
+            return
+        x0, y0, x1, y1 = self.bmode_region()
+        zoom = min(width / max(1, x1 - x0), height / max(1, y1 - y0))
+        self.canvas.set_view(origin=(x0, y0), zoom=zoom)
+
+    def display_image(self, array):
+        """Return the PIL image to display for a frame, cropped and magnified when zoomed"""
+        image = Image.fromarray(array)
+        self.update_view(*array.shape[:2])
+        if not self.canvas.is_zoomed():
+            return image
+        x0, y0, x1, y1 = self.bmode_region()
+        zoom = self.canvas.zoom
+        return image.crop((x0, y0, x1, y1)).resize((round((x1 - x0) * zoom), round((y1 - y0) * zoom)),
+                                                  Image.LANCZOS)
+
+    def toggle_zoom(self):
+        """Switch between the whole image and the magnified bottom (B-mode) view"""
+        data_utils.set_setting('ZOOM_BMODE', [self.zoom_bmode.get()])
+        if self.current_array is not None:
+            if self.shape.get() in ('rectangle', 'polygon') and len(self.roi_coords) == 1:
+                self.reset_draw()  # a single point being drawn: start again in the new view
+            self.ctrl.update_frame()
+        self.canvas.focus_set()
 
     def to_top(self, x, y):
         """Image coordinates of a point in the top field of view (clicks can be in either view)"""
@@ -292,10 +433,11 @@ class ImgPanel(ttk.Frame):
                 self._draw_both(self.canvas.create_oval, [(x - 2, y - 2), (x + 2, y + 2)], fill='yellow', outline='yellow')
             if len(self.apo_points) > 1:
                 self._draw_both(self.canvas.create_line, self.apo_points, fill='yellow', width=1)
+        self.roi_changed()
 
     def activate_slider(self, n_frames):
         self.n_frames = n_frames
-        self.ctrl.frame_label.config(text=f'{self.ctrl.current_frame + 1}/{n_frames}')
+        self.ctrl.update_label()
         self.ctrl.slider.config(to=self.n_frames)
         self.ctrl.slider.config(state='normal')  # activate slider
 
@@ -331,6 +473,7 @@ class ImgPanel(ttk.Frame):
         self.clear_apo()
         self.canvas.delete(self.polyg_top, self.polyg_down)
         self.activate_draw()
+        self.roi_changed()
 
     def get_top_coords(self):
         """Set coordinates of ROI in top field of view as the main ones"""
@@ -353,6 +496,7 @@ class ImgPanel(ttk.Frame):
             self.draw_rectangle()
         elif self.shape.get() == 'polygon':
             self.draw_polygon()
+        self.roi_changed()
 
     def draw_rectangle(self):
         self.polyg_top = self.canvas.create_rectangle(self.roi_coords,
@@ -390,14 +534,16 @@ class ImgPanel(ttk.Frame):
             self.get_top_coords()
 
     def on_button_press(self, event):
+        self.canvas.focus_set()  # for keyboard shortcuts (arrows, Backspace)
+        x, y = self.canvas.to_image(event.x, event.y)  # image coordinates (the view may be zoomed)
         if self.shape.get() == 'apo_auto':          # click on the aponeurosis: follow the line from there
-            self.view.apo_from_click(*self.to_top(event.x, event.y))
+            self.view.apo_from_click(*self.to_top(x, y))
             return
         if self.shape.get() == 'apo_manual':        # points along the aponeurosis, double-click to finish
             if self.apo_result:                      # a finished line: start a new one
                 self.clear_apo()
                 self.roi_coords = []
-            point = self.to_top(event.x, event.y)
+            point = self.to_top(x, y)
             if not self.apo_points or point != self.apo_points[-1]:
                 self.apo_points.append(point)
             self.view.show_apo_hint()
@@ -406,19 +552,11 @@ class ImgPanel(ttk.Frame):
         if self.new_roi.get():
             self.reset_draw()
         self.new_roi.set(False)
-        x, y = event.x, event.y
         self.roi_coords.append((x, y))
         self.canvas.delete(self.polyg_top, self.polyg_down)
         if len(self.roi_coords) == 1:
-            pt_coords = (x - 1, y - 1, x + 1, y + 1)
-            self.polyg_top = self.canvas.create_oval(pt_coords,
-                                                     fill='green',
-                                                     outline='green',
-                                                     width=5)
-            self.polyg_down = self.canvas.create_oval(self.mirror_coords(pt_coords),
-                                                      fill='green',
-                                                      outline='green',
-                                                      width=5)
+            self.draw_first_point()
+            self.roi_changed()
         else:
             self.draw_rois()
 
@@ -444,13 +582,16 @@ class DisplayControls(ttk.Frame):
         self.slider.pack(side='left', padx=5, pady=5, expand=True, fill='both')
         self.slider['command'] = self.update_slider
 
-        self.frame_label = ttk.Label(self, width=10, text='')
+        self.frame_label = ttk.Label(self, width=len('Map 000/000 (frame 0000)'), text='')
         self.frame_label.pack(side='left')
+
+        self.zoom_check = ttk.Checkbutton(self, text='Zoom B-mode', variable=self.img_panel.zoom_bmode,
+                                          command=self.img_panel.toggle_zoom)
+        self.zoom_check.pack(side='left', padx=(5, 0))
 
     def update_slider(self, event):
         if int(self.current_value.get()) < self.img_panel.n_frames:
             self.current_frame = int(self.current_value.get())
-            self.frame_label.config(text=f'{self.current_frame + 1}/{self.img_panel.n_frames}')
             self.update_frame()
             self.img_panel.canvas.focus_set()
 
@@ -481,11 +622,21 @@ class DisplayControls(ttk.Frame):
 
     def update_frame(self):
         self.current_value.set(self.current_frame)
-        self.frame_label.config(text=f'{self.current_frame + 1}/{self.img_panel.n_frames}')
-        self.image = Image.fromarray(self.img_panel.current_array[self.current_frame])
+        self.update_label()
+        self.image = self.img_panel.display_image(self.img_panel.current_array[self.current_frame])
         self.img = ImageTk.PhotoImage(image=self.image)
-        self.img_panel.canvas.create_image(0, 0, anchor=tk.NW, image=self.img)
+        self.img_panel.canvas.delete('frame')  # previous frame (avoids stacking image items)
+        self.img_panel.canvas.create_image(0, 0, anchor=tk.NW, image=self.img, tags='frame')
         self.img_panel.set_rois()
+
+    def update_label(self):
+        """Position in the loop: DICOM frame, or SWE map (with its DICOM frame) once SWE fhz is set"""
+        i, n = self.current_frame, self.img_panel.n_frames
+        frames = self.img_panel.swe_frames
+        if frames is not None and i < len(frames):
+            self.frame_label.config(text=f'Map {i + 1}/{n} (frame {frames[i]})')
+        elif n:
+            self.frame_label.config(text=f'Frame {i + 1}/{n}')
 
     def left_key(self, event):
         if int(self.current_value.get()) > 0:

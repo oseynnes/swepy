@@ -40,7 +40,10 @@ class DcmData:
         self.roi_coords = None
         self.roi_shape = None
         self.top_fov_coords = None
+        self.bot_fov_coords = None  # bottom field of view (B-mode image), from the DICOM regions
         self.fov_y_offset = None  # vertical distance between top and bottom fields of view
+        self.pixel_mm = None  # (x, y) pixel size in mm
+        self.depth_origin_y = None  # image row of depth 0 (top of the field of view)
         self.bmode_fhz = None
         self.frame_time_ms = None
         self.pixel_xy = None  # (x, y) image coordinates of ROI pixels
@@ -99,7 +102,12 @@ class DcmData:
         self.define_rois()
         self.roi_coords = self.get_roi_coord(self.swe)
         self.top_fov_coords = self.get_roi_coord(self.top_fov, offset=0)
+        self.bot_fov_coords = self.get_roi_coord(self.bot_fov, offset=0)
         self.fov_y_offset = self.bot_fov.RegionLocationMinY0 - self.top_fov.RegionLocationMinY0
+        px = float(self.swe.PhysicalDeltaX) * 10  # cm to mm
+        delta_y = getattr(self.swe, 'PhysicalDeltaY', None)
+        self.pixel_mm = (px, float(delta_y) * 10 if delta_y else px)
+        self.depth_origin_y = self.top_fov.RegionLocationMinY0
         # FrameTime (ms) gives the actual frame interval of the stored loop. On Mach30 exports
         # (FrameTime 50 ms) it matches observed SWE refresh periods, while RecommendedDisplayFrameRate
         # (19 Hz) does not.
@@ -339,6 +347,12 @@ class DcmData:
                      'swe_refresh_detection': resampling.get('method'),
                      'saturation_threshold_%_of_max_scale': sat_thresh,
                      'swepy_version': swepy_core.__version__}
+        geometry = None
+        if self.pixel_mm and self.roi_coords:
+            shape = 'rectangle' if self.roi_shape == 'rectangle' and len(self.roi_coords) == 2 else 'polygon'
+            geometry = data_utils.roi_geometry(self.roi_coords, shape, self.pixel_mm, self.depth_origin_y)
+        for key, value in (geometry or {}).items():
+            d['meta'][f'roi_{key}'] = round(value, 2)
         d['meta'].update({f'apo_{k}': v for k, v in self.apo_info.items()})
         summary.apply_quality(d)
         self.results = d

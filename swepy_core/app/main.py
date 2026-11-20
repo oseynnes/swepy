@@ -47,7 +47,10 @@ class View(ttk.Frame):
         self.img_panel = ImgPanel(self)
         self.canvas = self.img_panel.canvas
         self.fov_coords = None
+        self.bot_fov_coords = None
         self.fov_y_offset = None
+        self.pixel_mm = None
+        self.depth_origin_y = None
         self.init_roi_coords = None
         self.init_roi_shape = None
 
@@ -57,6 +60,9 @@ class View(ttk.Frame):
         self.swe_fhz = None
         self.max_scale = None
         self.left_panel.enter_btn['command'] = self.get_usr_entry
+        # entries keep the values in use: flag edits that are not set yet
+        for var in (self.left_panel.usr_fhz, self.left_panel.usr_scale):
+            var.trace_add('write', lambda *args: self.on_entry_edit())
         self.left_panel.reset_roi_btn['command'] = self.reset_rois
         self.left_panel.analyse_btn['command'] = self.process
         self.left_panel.value_map_btn['command'] = self.show_value_map
@@ -97,6 +103,7 @@ class View(ttk.Frame):
             if self.controller.analyse():
                 if self.img_panel.is_apo():
                     self.remember_apo_depth()
+                self.left_panel.set_analyse_status(f'Analysed {self.img_name}: see the Results tab')
                 self.block.set(False)  # only move on (e.g. to next file of a batch) if analysis worked
         else:
             app_utils.warn_no_video()
@@ -147,9 +154,47 @@ class View(ttk.Frame):
             app_utils.warn_no_video()
             return
 
+    def on_entry_edit(self):
+        """Warn when the values entered differ from the values in use (Set values not clicked yet)"""
+        if self.swe_fhz is None and self.max_scale is None:
+            return  # nothing set yet: status given by the screen labels
+        def same(text, value):
+            try:
+                return value is not None and float(text) == float(value)
+            except ValueError:
+                return False
+        if same(self.left_panel.usr_fhz.get(), self.swe_fhz) and same(self.left_panel.usr_scale.get(), self.max_scale):
+            self.left_panel.set_entry_status('Values in use', 'grey')
+        else:
+            self.left_panel.set_entry_status('Values changed: click Set values to use them', 'firebrick')
+
+    def update_roi_info(self):
+        """Describe size and depth of the ROI (top field of view), and how to draw it"""
+        if not hasattr(self, 'left_panel') or not self.ds or not self.pixel_mm:
+            return
+        panel = self.img_panel
+        shape = panel.shape.get()
+        hints = {'rectangle': 'Click two opposite corners.',
+                 'polygon': 'Double-click to finish; Backspace or right-click: undo last point.',
+                 'apo_auto': 'Click on the aponeurosis to follow it.',
+                 'apo_manual': 'Double-click to finish; Backspace or right-click: undo last point.'}
+        coords = panel.roi_coords
+        geometry = None
+        if coords and (len(coords) > 2 or (shape == 'rectangle' and len(coords) == 2)):
+            top = coords if panel.isin_top_fov() else panel.mirror_coords()
+            geometry = data_utils.roi_geometry(top, 'rectangle' if shape == 'rectangle' else 'polygon',
+                                               self.pixel_mm, self.depth_origin_y)
+        if geometry:
+            text = (f"ROI: {geometry['width_mm']:.1f} \u00d7 {geometry['height_mm']:.1f} mm ({geometry['area_mm2']:.0f} mm\u00b2)\n"
+                    f"Depth {geometry['depth_top_mm']:.1f}\u2013{geometry['depth_bottom_mm']:.1f} mm")
+        else:
+            text = 'ROI: none'
+        self.left_panel.set_roi_info(text, hints.get(shape, ''))
+
     def get_swe_frames(self):
         """Set GUI to display and analyse SWE unique scans only"""
         self.img_panel.swe_array = self.controller.get_swe_array(self.swe_fhz)
+        self.img_panel.swe_frames = self.controller.data.swe_indices + 1  # DICOM frame numbers (1-based)
         self.img_panel.current_array = self.img_panel.swe_array
         self.img_panel.ctrl.current_value.set(0)
         self.img_panel.activate_slider(self.img_panel.swe_array.shape[0])
@@ -184,6 +229,10 @@ class View(ttk.Frame):
         (x0, y0), (x1, y1) = self.fov_coords
         self.img_panel.top_fov_coords = {'x0': x0, 'y0': y0, 'x1': x1, 'y1': y1}
         self.img_panel.fov_y_offset = self.fov_y_offset
+        self.img_panel.swe_frames = None
+        if self.bot_fov_coords:
+            (bx0, by0), (bx1, by1) = self.bot_fov_coords
+            self.img_panel.bot_fov_coords = {'x0': bx0, 'y0': by0, 'x1': bx1, 'y1': by1}
         self.img_panel.roi_coords = self.init_roi_coords
         self.img_panel.current_array = self.img_array
         self.img_panel.ctrl.update_frame()
@@ -319,7 +368,10 @@ class Controller:
         self.view.img_array = self.data.img_array
         self.view.img_name = self.data.img_name
         self.view.fov_coords = self.data.top_fov_coords
+        self.view.bot_fov_coords = self.data.bot_fov_coords
         self.view.fov_y_offset = self.data.fov_y_offset
+        self.view.pixel_mm = self.data.pixel_mm
+        self.view.depth_origin_y = self.data.depth_origin_y
         self.view.init_roi_coords = self.data.roi_coords
         self.view.load_file()
 
@@ -405,7 +457,7 @@ class Controller:
             return False
         self.output.results = self.data.results
         self.output.fig_panel.change_plot()
-        self.output.update_tv(self.data.path)
+        self.output.update_tv(self.data.path, self.data.results)
         data_utils.pickle_results(self.data.path, self.data.results)
         return True
 
@@ -437,13 +489,14 @@ class Output(ttk.Frame):
 
         self.fig_panel = FigPanel(self)
 
-    def update_tv(self, path):
-        """Add file name and path to list of analysed files"""
+    def update_tv(self, path, results=None):
+        """Add file name and path to list of analysed files, with warnings to check"""
         self.tv_files.append((path.name, path.resolve().parent))
         if path.name in self.files_panel.tv.get_children():
             self.files_panel.tv.delete(path.name)
-        self.files_panel.tv.insert('', tk.END, values=self.tv_files[-1], iid=path.name)
+        self.files_panel.insert_file(path.name, self.tv_files[-1][1], results)
         self.files_panel.tv.focus(self.files_panel.tv.get_children()[-1])
+        self.files_panel.show_folder(self.tv_files[-1][1])
 
     def update_tv_selection(self, event):
         """Update list of selected rows in list of analysed files"""
@@ -455,6 +508,7 @@ class Output(ttk.Frame):
         rows = list(self.tv_selection)
         if not rows:  # e.g. after clearing the table
             return
+        self.files_panel.show_folder(rows[0][1] if len(rows) == 1 else f'{len(rows)} files selected')
         path = data_utils.get_cached_results_path(rows[0][0])
         if not path.exists():
             return

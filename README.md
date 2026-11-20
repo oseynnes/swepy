@@ -61,8 +61,10 @@ With the virtual environment activated, start the application with:
       The Mach30 can display either, and the image only shows "kPa": check the scanner's elasticity setting
       (and record it in your protocol). A wrong choice changes all values by a factor of 3.
 
-   Enlarged copies of both labels are shown under the entries, to read them easily. swepy remembers the values
+   Enlarged copies of both labels are shown under the entries, to read them easily. The entries keep the values in use;
+   if you edit them, a message reminds you to click **Set values** again. swepy remembers the values
    entered for each label: files showing the same labels are filled in automatically, and new labels must be entered.
+   Once the frequency is set, the slider steps through SWE maps (e.g. "Map 2/20 (frame 16)") instead of DICOM frames.
 
    <p>
    <img src="./src/sc1.png" alt="SWE frequency label on the scanner screen" width="200">
@@ -72,8 +74,13 @@ With the virtual environment activated, start the application with:
    ![Image processing tab](./src/sc0.png)
 
 3. Adjust the ROI on either view (**ROI shape**: rectangle or polygon). A rectangle within the SWE box is suggested; **Reset ROI** restores it.
+   For a polygon, click points and double-click to finish; **Backspace** or a right-click removes the last point.
+   The line under the file properties gives the ROI size, area and depth below the skin (top of the image), to keep ROIs at a consistent depth;
+   these are also exported with the results (`roi_width_mm`, `roi_height_mm`, `roi_area_mm2`, `roi_depth_top_mm`, `roi_depth_bottom_mm`).
+   **Zoom B-mode** magnifies the bottom view (B-mode image without colour) to place the ROI more precisely;
+   ROI coordinates are the same in both views.
 4. Optionally, click **Value map** to check the ROI before analysing (see below).
-5. Click **Analyse**.
+5. Click **Analyse**. A message under the ROI description confirms the analysis.
 6. View and export results from the **Results** tab.
 
    ![Results tab](./src/sc3.png)
@@ -97,10 +104,17 @@ and unit measured (the **Scale variable** chosen for the analysis). It is given 
 (`mean_of_map_medians`, with the measured `variable`, such as "Shear modulus (kPa)") and highlighted in the table window and in Excel files, together with the per-map median of that
 variable. The measured variable is listed before the two others, which are converted from it.
 
-The **Results** tab plots the median of each SWE map over time, with the spread of values within each map
+The **Results** tab shows the main result above the plot, with the variation between maps, the number of included maps
+and warnings about the recording (the note on the colour scale resolution is shown under the plot). **Copy** copies it as one tab-separated row (file, mean of map medians, variable, SD, CV%, included maps,
+total maps), ready to paste into a spreadsheet. Files with warnings (e.g. coarse scale, no map included) are shown in red
+in the list of analysed files, with the warning in the **Check** column; the folder of the selected file is shown below the list.
+
+The plot shows the median of each SWE map over time, with the spread of values within each map
 (interquartile range, shaded) and the mean of map medians (dashed line); in aponeurosis mode, the muscle reference
 is plotted too. Maps excluded by the quality filters are shown as grey crosses, labelled with the reason for exclusion.
-*Plot: Distributions* shows the distribution of values in each map instead (violin plots). **Display in table** shows the summary and per-map tables,
+*Plot: Distributions* shows the distribution of values in each map instead (violin plots).
+The y axis is fitted to the data, to show the variation between maps; tick **Start y axis at 0** to include zero.
+**Display variable** only changes the variable displayed (the analysis uses the **Scale variable** of the Image processing tab). **Display in table** shows the summary and per-map tables,
 and **Value map** shows the analysed ROI map by map.
 
 **Quality filters** are set in the Results tab: maximal % of void pixels (default 20 %), maximal % of saturated pixels

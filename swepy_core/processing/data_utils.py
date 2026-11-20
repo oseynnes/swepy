@@ -333,6 +333,29 @@ def filter_nans(lists):
     return filtered
 
 
+def roi_geometry(coords, shape, pixel_mm, depth_origin_y):
+    """Size and depth of a ROI, in mm
+    Args:
+        coords: ROI in image coordinates (top field of view): 2 corners for a rectangle, else polygon points
+        shape (str): 'rectangle' or 'polygon' (aponeurosis bands are polygons)
+        pixel_mm: (x, y) pixel size in mm
+        depth_origin_y: image row of the top of the field of view (skin surface, depth 0)
+    Returns: dict with width_mm, height_mm, area_mm2, depth_top_mm and depth_bottom_mm, or None
+    """
+    if not coords or len(coords) < 2:
+        return None
+    points = rect_polygonise(coords) if shape == 'rectangle' and len(coords) == 2 else list(coords)
+    xs = np.array([p[0] for p in points], dtype=float)
+    ys = np.array([p[1] for p in points], dtype=float)
+    px, py = pixel_mm
+    area = 0.5 * abs(np.dot(xs, np.roll(ys, 1)) - np.dot(ys, np.roll(xs, 1))) * px * py if len(points) > 2 else 0.0
+    return {'width_mm': float((xs.max() - xs.min()) * px),
+            'height_mm': float((ys.max() - ys.min()) * py),
+            'area_mm2': float(area),
+            'depth_top_mm': float((ys.min() - depth_origin_y) * py),
+            'depth_bottom_mm': float((ys.max() - depth_origin_y) * py)}
+
+
 def rect_polygonise(rect_coord):
     """Generate a list of coordinates for all points of a rectangular selection
     Args:

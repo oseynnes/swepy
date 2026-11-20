@@ -1,6 +1,7 @@
 import tkinter as tk
 import tkinter.filedialog as fd
 from pathlib import Path
+from tkinter import font as tkfont
 from tkinter import ttk
 from tkinter.messagebox import showerror, showinfo
 
@@ -64,6 +65,19 @@ def display_frame(df):
     return pd.DataFrame({col: [fmt(v) for v in df[col]] for col in df.columns}, dtype=object)
 
 
+def file_warnings(results):
+    """Short warnings about a recording, to flag it in the list of analysed files ('' if none)"""
+    summ = summary.summarise(results)
+    warnings = []
+    if not summ['n_maps_included']:
+        warnings.append('no map included')
+    if summ.get('scale_warning'):
+        warnings.append('coarse scale')
+    if summ.get('apo_edge_warning'):
+        warnings.append('near box edge')
+    return ', '.join(warnings)
+
+
 class FilesPanel(ttk.LabelFrame):
     """Panel of output tab listing analysed files"""
 
@@ -73,31 +87,47 @@ class FilesPanel(ttk.LabelFrame):
         self.config(text='Analysed files', padding=5)
         self.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NSEW)
 
-        columns = ('file_name', 'path')
-        self.tv = ttk.Treeview(self, columns=columns, show='headings', height=3)
+        # values: file name, folder (shown below the list for the selected file), warnings
+        columns = ('file_name', 'path', 'check')
+        self.tv = ttk.Treeview(self, columns=columns, displaycolumns=('file_name', 'check'), show='headings',
+                               height=3)
         self.tv.heading('file_name', text='File', anchor=tk.W)
-        self.tv.column('file_name', width=text_width('C0000000.dcm'), minwidth=60, stretch=False)
-        self.tv.heading('path', text='Path', anchor=tk.W)
-        # path column scrolls horizontally rather than forcing a very wide window
-        self.tv.column('path', width=text_width('x' * 30), minwidth=100, stretch=True)
+        self.tv.column('file_name', width=text_width('C0000000.dcm'), minwidth=60, stretch=True)
+        self.tv.heading('check', text='Check', anchor=tk.W)
+        self.tv.column('check', width=text_width('coarse scale, near box edge'), minwidth=60, stretch=True)
+        self.tv.tag_configure('warning', foreground='firebrick')
+        self.folder = ttk.Label(self, text='', foreground='grey', wraplength=text_width('x' * 45))
+        self.folder.pack(side='bottom', anchor=tk.W, pady=(3, 0))
         self.add_scrollbars()  # NB: scrollbars packed first, so they are never squeezed out
         self.tv.pack(fill=tk.BOTH, expand=True)
 
     def add_scrollbars(self):
-        self.sb_x = ttk.Scrollbar(self, orient=tk.HORIZONTAL, command=self.tv.xview)
         self.sb_y = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tv.yview)
-        self.tv.configure(xscrollcommand=self.sb_x.set, yscrollcommand=self.sb_y.set)
-        self.sb_x.pack(side='bottom', fill='x')
+        self.tv.configure(yscrollcommand=self.sb_y.set)
         self.sb_y.pack(side='right', fill='y')
+
+    def insert_file(self, name, folder, results=None):
+        """List an analysed file, flagged in red if its results have warnings"""
+        warnings = file_warnings(results) if results else ''
+        self.tv.insert('', tk.END, values=(name, str(folder), warnings), iid=name,
+                       tags=('warning',) if warnings else ())
+
+    def update_warnings(self, item, results):
+        """Refresh the warnings of a listed file (e.g. after changing quality filters)"""
+        name, folder = self.tv.item(item)['values'][:2]
+        warnings = file_warnings(results)
+        self.tv.item(item, values=(name, folder, warnings), tags=('warning',) if warnings else ())
+
+    def show_folder(self, folder):
+        self.folder.config(text=f'Folder: {folder}' if folder and 'selected' not in str(folder) else str(folder or ''))
 
     def load_tv_from_pickle(self, paths):
         """Load cached results from previous analyses"""
-        cached = [load_pickle(path) for path in paths]
-        rows = [results['file'] for results in cached]
-        for row in rows:
-            if self.tv.exists(row[0]):  # already listed
+        for results in (load_pickle(path) for path in paths):
+            name, folder = results['file'][:2]
+            if self.tv.exists(name):  # already listed
                 continue
-            self.tv.insert('', tk.END, values=row, iid=row[0])
+            self.insert_file(name, folder, results)
 
     def clear_treeview(self):
         """Clear table with analysed files"""
@@ -276,7 +306,9 @@ class QualityPanel(ttk.LabelFrame):
         for item in tv.get_children():
             path = data_utils.get_cached_results_path(tv.item(item)['values'][0])
             if path.exists():
-                save_pickle(summary.apply_quality(load_pickle(path), quality), path)
+                results = summary.apply_quality(load_pickle(path), quality)
+                save_pickle(results, path)
+                self.output.files_panel.update_warnings(item, results)
         if self.output.results:
             summary.apply_quality(self.output.results, quality)
             self.output.fig_panel.change_plot()
@@ -294,13 +326,28 @@ class FigPanel(ttk.Frame):
 
         # Plot controls go in the left column of the Results tab (under the save buttons),
         # so the figure can use all the remaining space and shrink on small screens
-        self.lf1 = ttk.LabelFrame(self.output, text='Variable', padding=5)
+        self.lf1 = ttk.LabelFrame(self.output, text='Display variable', padding=5)
         self.lf1.grid(row=4, column=0, padx=5, pady=5, sticky=tk.EW)
         self.results_btn_frame = ttk.Frame(self.output)
         self.results_btn_frame.grid(row=5, column=0, padx=5, pady=5, sticky=tk.EW)
 
         self.lf0 = ttk.LabelFrame(self, text='Preview', padding=5)
         self.lf0.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        # main result as selectable text, with a button copying it as a spreadsheet row
+        summary_frame = ttk.Frame(self.lf0)
+        summary_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 5))
+        self.summary_text = tk.Text(summary_frame, height=3, width=30, wrap='word', relief='flat', borderwidth=0,
+                                    highlightthickness=0, padx=4, pady=3, font='TkDefaultFont')
+        self.bold_font = tkfont.nametofont('TkDefaultFont').copy()
+        self.bold_font.configure(weight='bold')
+        self.summary_text.tag_configure('main', font=self.bold_font)
+        self.summary_text.tag_configure('warning', foreground='firebrick')
+        self.summary_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.summary_text.bind('<Configure>', lambda event: self.fit_summary_height())
+        self.copy_btn = ttk.Button(summary_frame, text='Copy', command=self.copy_summary)
+        self.copy_btn.pack(side=tk.RIGHT, anchor=tk.N, padx=(5, 0))
+        self.copy_row = ''
+        self.set_summary_text([])
         # match figure resolution to display scaling, so plot text is readable on HiDPI screens
         self.figure = Figure(figsize=(6, 4), dpi=100 * get_ui_scale(self), layout='constrained')
         self.figure_canvas = FigureCanvasTkAgg(self.figure, self.lf0)
@@ -332,6 +379,10 @@ class FigPanel(ttk.Frame):
         for value, text in (('time', 'Time course'), ('violin', 'Distributions')):
             ttk.Radiobutton(view_frame, text=text, value=value, variable=self.plot_view,
                             command=self.change_view).pack(side=tk.LEFT, padx=(5, 0))
+        saved_zero = data_utils.get_settings('Y_FROM_ZERO')
+        self.y_from_zero = tk.BooleanVar(value=bool(saved_zero and saved_zero[0]))
+        ttk.Checkbutton(self.lf1, text='Start y axis at 0', variable=self.y_from_zero,
+                        command=self.change_y_axis).grid(column=0, row=grid_row + 2, sticky=tk.W, pady=(4, 0))
 
         self.results_btn = ttk.Button(self.results_btn_frame, text='Display in table', command=self.display_results)
         self.results_btn.grid(row=0, column=0, padx=5, sticky=tk.W)
@@ -341,6 +392,71 @@ class FigPanel(ttk.Frame):
     def change_view(self):
         data_utils.set_setting('PLOT_VIEW', [self.plot_view.get()])
         self.change_plot()
+
+    def change_y_axis(self):
+        data_utils.set_setting('Y_FROM_ZERO', [self.y_from_zero.get()])
+        self.change_plot()
+
+    def set_summary_text(self, lines):
+        """Show summary lines, as (text, tag) pairs, in the read-only text box"""
+        self.summary_text.config(state='normal')
+        self.summary_text.delete('1.0', tk.END)
+        if not lines:
+            lines = [('No result to show: analyse a file, or select one in the list', '')]
+        for i, (text, tag) in enumerate(lines):
+            self.summary_text.insert(tk.END, ('\n' if i else '') + text, tag)
+        self.summary_text.config(state='disabled')  # still selectable for copying
+        self.fit_summary_height()
+        self.copy_btn.state(['!disabled'] if self.copy_row else ['disabled'])
+
+    def fit_summary_height(self):
+        """Fit the summary box to its text, wrapped at the current width"""
+        text = self.summary_text
+        n_lines = int(text.index('end-1c').split('.')[0])
+        if text.winfo_ismapped() and text.winfo_width() > 50:  # wrapped lines are only known once displayed
+            count = text.count('1.0', 'end-1c', 'displaylines')
+            wrapped = (count[0] if isinstance(count, tuple) else count) or 0
+            height = max(n_lines, wrapped + 1)  # display lines count line breaks: one more line than counted
+        else:
+            height = n_lines
+        if int(text.cget('height')) != height:
+            text.config(height=height)
+
+    def update_summary(self, results):
+        """Main result of the recording (measured variable), its variation, included maps and warnings
+        (the scale resolution note is only on the figure)"""
+        summ = summary.summarise(results)
+        measured = summary.measured_var(results)
+        unit = summary.UNITS.get(measured, '')
+        lines = []
+        if summ['n_maps_included'] and measured:
+            sd, cv = summ[f'{measured}_SD_between_maps'], summ[f'{measured}_CV%_between_maps']
+            lines.append((f"{results['file'][0]}: mean of map medians {summ['mean_of_map_medians']:.2f} {unit} "
+                          f"({summary.LABELS[measured]})", 'main'))
+            lines.append((f"SD between maps {sd:.2f} {unit}, CV {cv:.1f}%  |  "
+                          f"{summ['n_maps_included']}/{summ['n_maps']} maps included"
+                          + (f"  |  muscle reference {summ['reference_mean_of_map_medians']:.2f} {unit} "
+                             f"(ratio {summ.get('ratio_to_reference', float('nan')):.2f})"
+                             if summ.get('reference_mean_of_map_medians') is not None else ''), ''))
+            self.copy_row = '\t'.join(str(v) for v in (
+                results['file'][0], f"{summ['mean_of_map_medians']:.4g}", summ['variable'], f'{sd:.4g}',
+                f'{cv:.3g}', summ['n_maps_included'], summ['n_maps']))
+        else:
+            lines.append((f"{results['file'][0]}: no map passed the quality filters", 'warning'))
+            self.copy_row = ''
+        warnings = []
+        if summ.get('apo_edge_warning'):
+            warnings.append(f"aponeurosis {summ['apo_min_edge_distance_mm']:.1f} mm from the SWE box edge")
+        if warnings:
+            lines.append(('\u26a0 ' + '; '.join(warnings), 'warning'))
+        self.set_summary_text(lines)
+
+    def copy_summary(self):
+        """Copy the main result as one tab-separated row (file, mean of map medians, variable, SD, CV%,
+        included maps, total maps), to paste into a spreadsheet"""
+        if self.copy_row:
+            self.clipboard_clear()
+            self.clipboard_append(self.copy_row)
 
     def change_plot(self):
         """Load results and call function to refresh plot"""
@@ -368,10 +484,13 @@ class FigPanel(ttk.Frame):
 
         self.figure.clear()
         axes = self.figure.add_subplot()
+        from_zero = self.y_from_zero.get()
         if self.plot_view.get() == 'violin':
             x, medians = self._plot_distributions(axes, values, included)
+            if from_zero:
+                axes.set_ylim(bottom=0)
         else:
-            x, medians = self._plot_time_course(axes, results, values, included, show_reference)
+            x, medians = self._plot_time_course(axes, results, values, included, show_reference, from_zero)
         if np.isfinite(mean_of_medians):
             axes.axhline(mean_of_medians, color='C1' if self.plot_view.get() == 'violin' else 'C0', ls='--', lw=1,
                          label=f'mean of map medians ({mean_of_medians:.2f} {unit})')
@@ -395,6 +514,7 @@ class FigPanel(ttk.Frame):
             axes.text(.01, .98, f"Aponeurosis {summ['apo_min_edge_distance_mm']:.1f} mm from the SWE box edge "
                                 f"(edge artefacts possible).",
                       transform=axes.transAxes, va='top', fontsize='small', color='firebrick')
+        self.update_summary(results)
         if summ.get('scale_warning'):     # resolution of the colour scale: a recommendation for future recordings
             # below the x axis label, so it never overlaps the data
             axes.annotate(f"Note: few colour levels of the scale are used (median level "
@@ -405,9 +525,11 @@ class FigPanel(ttk.Frame):
         self.figure_canvas.draw_idle()
 
     @staticmethod
-    def _plot_time_course(axes, results, values, included, show_reference):
+    def _plot_time_course(axes, results, values, included, show_reference, from_zero=False):
         """Per-map median over time, with spread within each map (IQR) and the muscle reference
-        Returns: x positions and medians of the maps"""
+        Args:
+            from_zero (bool): y axis from 0, else fitted to the data (shows variation between maps better)
+        Returns: x positions and medians of the maps (maps without value at the bottom of the axis)"""
         stats = results['stats']
         n_maps = values.shape[0]
         if 'time_s' in stats:
@@ -417,21 +539,28 @@ class FigPanel(ttk.Frame):
             x = np.arange(1, n_maps + 1, dtype=float)
             axes.set_xlabel('SWE map')
         q25, medians, q75 = summary.per_map_stats(values)['q25_median_q75']
+        ref = np.asarray(stats['reference_median'], dtype=float) if show_reference else None
+        shown = [q25, q75, medians] + ([ref] if show_reference else [])
+        finite = np.concatenate([np.asarray(v, float)[np.isfinite(v)] for v in shown])
+        if finite.size:
+            low, high = finite.min(), finite.max()
+            if from_zero:
+                low, high = 0, (high * 1.15 if high > 0 else 1)
+            else:
+                pad = max((high - low) * .15, abs(high) * .02, 1e-3)
+                low, high = low - pad, high + pad * 2  # room for the legend
+        else:
+            low, high = 0, 1
+        medians = np.where(np.isnan(medians), low, medians)  # maps without value: at the bottom of the axis
         axes.fill_between(x, q25, q75, color='C0', alpha=.15, step='mid', label='IQR within map')
         axes.plot(x, medians, '-', color='C0', lw=1, alpha=.5)
         axes.plot(x[included], medians[included], 'o', color='C0', label='map median')
         if (~included).any():
-            axes.plot(x[~included], np.nan_to_num(medians[~included], nan=0), 'x', color='grey', ms=8,
-                      mew=2, label='excluded map')
-        shown = [q25, q75, medians]
+            axes.plot(x[~included], medians[~included], 'x', color='grey', ms=8, mew=2, label='excluded map',
+                      clip_on=False)
         if show_reference:
-            ref = np.asarray(stats['reference_median'], dtype=float)
             axes.plot(x, ref, 's-', color='darkorange', ms=4, lw=1, label='muscle reference (map medians)')
-            shown.append(ref)
-        finite = np.concatenate([np.asarray(v, float)[np.isfinite(v)] for v in shown])
-        if finite.size:
-            top = finite.max()
-            axes.set_ylim(0, top * 1.15 if top > 0 else 1)
+        axes.set_ylim(low, high)
         return x, medians
 
     @staticmethod
@@ -478,6 +607,8 @@ class FigPanel(ttk.Frame):
 
     def clear_figure(self):
         """Remove plot from preview (keeps figure and toolbar usable for the next analysis)"""
+        self.copy_row = ''
+        self.set_summary_text([])
         self.figure.clear()
         self.figure_canvas.draw_idle()
 
