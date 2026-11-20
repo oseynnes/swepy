@@ -220,6 +220,14 @@ class View(ttk.Frame):
         self.canvas.bind('<Left>', self.img_panel.ctrl.left_key)
         self.canvas.bind('<Right>', self.img_panel.ctrl.right_key)
 
+    def initial_roi(self):
+        """Suggested ROI (rectangle within the SWE box, given by 2 corners) in the remembered ROI shape:
+        as its 4 corners for a polygon (2 points would be drawn as a line)"""
+        coords = list(self.init_roi_coords or [])
+        if self.img_panel.shape.get() == 'polygon' and len(coords) == 2:
+            return data_utils.rect_polygonise(coords)
+        return coords
+
     def set_img_name(self):
         self.top.img_name.config(text=self.img_name)
 
@@ -233,7 +241,7 @@ class View(ttk.Frame):
         if self.bot_fov_coords:
             (bx0, by0), (bx1, by1) = self.bot_fov_coords
             self.img_panel.bot_fov_coords = {'x0': bx0, 'y0': by0, 'x1': bx1, 'y1': by1}
-        self.img_panel.roi_coords = self.init_roi_coords
+        self.img_panel.roi_coords = self.initial_roi()
         self.img_panel.current_array = self.img_array
         self.img_panel.ctrl.update_frame()
         self.img_panel.activate_slider(self.ds.NumberOfFrames)
